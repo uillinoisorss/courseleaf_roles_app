@@ -26,6 +26,9 @@ def extract_from_sql_server(server, user, password, query, parameters = None):
         logging.error(f'An exception was raised while connecting to SQL Server {server}: {str(e)}')
     return return_data
 
+# cursor.fetchall() returns a list of rows, with row being a tuple-like data type from the pyodbc package
+# (see https://github.com/mkleehammer/pyodbc/wiki/Getting-started for details)
+
 # oracledb can use both named and positional parameters; I use positional parameters here for consistency
 # with the SQL Server extract method. As above, some checks to ensure that the correct number of parameters
 # are called for, but I can take care of those later. Lots of fun for future me! 

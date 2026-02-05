@@ -13,7 +13,12 @@ courseleaf:
     users: SELECT userid AS uin, lname AS last_name, fname AS first_name, email FROM users ;
 registrar:
   select:
-    load_id: SELECT ISNULL(MAX(load_id), 0) FROM [CourseLeaf_Contacts].[dbo].[courseleaf_role_data_load] ;
+    load_id:
+      courses: SELECT ISNULL(MAX(load_id), 0) AS max_load_id FROM [CourseLeaf_Contacts].[dbo].[courseleaf_courses] ;
+      departments: SELECT ISNULL(MAX(load_id), 0) AS max_load_id FROM [CourseLeaf_Contacts].[dbo].[courseleaf_departments] ;
+      roles: SELECT ISNULL(MAX(load_id), 0) AS max_load_id FROM [CourseLeaf_Contacts].[dbo].[courseleaf_roles] ;
+      subjects: SELECT ISNULL(MAX(load_id), 0) AS max_load_id FROM [CourseLeaf_Contacts].[dbo].[courseleaf_subjects] ;
+      users: SELECT ISNULL(MAX(load_id), 0) AS max_load_id FROM [CourseLeaf_Contacts].[dbo].[courseleaf_users] ;
   insert:
     roles: INSERT INTO [CourseLeaf_Contacts].[dbo].[courseleaf_role_data_load] (load_id, role, dept_no, dept, role_title, uin, last_name, first_name, email, load_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 stored_procedures:
