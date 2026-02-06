@@ -3,7 +3,9 @@ SELECT
 	userid AS uin,
 	lname AS last_name,
 	fname AS first_name,
-	email
+	email AS email
 FROM
 	users
+WHERE
+	LENGTH(uin) = 9
 ;

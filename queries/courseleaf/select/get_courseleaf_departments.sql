@@ -43,7 +43,7 @@ FROM
 	stvdept_oride
 )
 SELECT
-	orig.dept_no,
+	orig.dept_no AS dept_no,
 	CASE
 		WHEN oride.dept_name IS NOT NULL THEN oride.dept_name
 		WHEN orig.dept_name IS NOT NULL THEN orig.dept_name
@@ -59,7 +59,7 @@ SELECT
 				stvdept_code = orig.dept_no
 		)
 	END AS dept_name,
-	orig.college,
+	orig.college AS college,
 	(
 	SELECT
 		codedesc.name

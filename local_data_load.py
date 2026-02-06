@@ -13,6 +13,7 @@ import pandas as pd
 import paramiko
 from yaml import safe_load as load
 
+import shared.misc as misc
 import shared.etl_functions as etl
 
 ######################################################################################################
@@ -127,12 +128,57 @@ def get_next_load_id(table):
         logger.error(f'An exception was raised while connecting to {str(REG_HOSTNAME)}: {str(e)}')
         return -1
 
-def load_courseleaf_courses():
-    # load_id (int), course (str), subject_code (str), course_no (str), courst_title (str), insert_timestamp (date)
-    pass
+def extract_and_load_courseleaf_courses():
+    """
+    """
+    extract_query = QUERIES['courseleaf']['select']['courses']
+    try:
+        extract_results = etl.extract_from_sqlite(LOCAL_PATH_TO_DB, extract_query)
+    except Exception as e:
+        logger.error(f'COURSELEAF_COURSES: {str(e)}')
+    columns = ['course', 'subject_code', 'course_no', 'course_title']
+    courses = etl.query_results_to_dataframe(extract_results, columns)
+    logger.info(f'COURSELEAF_COURSES: Read {courses.shape[0]} rows from SQLite database.')
 
-def load_courseleaf_departments():
-    pass
+    courses.fillna('', inplace = True)
+    courses['load_id'] = get_next_load_id('courses')
+    courses['insert_timestamp'] = datetime.now()
+    courses = courses[['load_id'] + columns + ['insert_timestamp']]
+    logger.info(f'COURSELEAF_COURSES: Prepared {courses.shape[0]} rows for load to SQL Server.')
+
+    load_query = QUERIES['registrar']['insert']['courses']
+    load_data = etl.parameterize_data_frame(courses)
+    try:
+        etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
+        logger.info(f'COURSELEAF_COURSES: Load to SQL Server complete.')
+    except Exception as e:
+        logger.error(f'COURSELEAF_COURSES: {str(e)}')
+
+def extract_and_load_courseleaf_departments():
+    """
+    """
+    extract_query = QUERIES['courseleaf']['select']['departments']
+    try:
+        extract_results = etl.extract_from_sqlite(LOCAL_PATH_TO_DB, extract_query)
+    except Exception as e:
+        logger.error(f'COURSELEAF_DEPARTMENTS: {str(e)}')
+    columns = ['dept_no', 'dept_name', 'college', 'college_name']
+    departments = etl.query_results_to_dataframe(extract_results, columns)
+    logger.info(f'COURSELEAF_DEPARTMENTS: Read {departments.shape[0]} rows from SQLite database.')
+
+    departments.fillna('', inplace = True)
+    departments['load_id'] = get_next_load_id('departments')
+    departments['insert_timestamp'] = datetime.now()
+    departments = departments[['load_id'] + columns + ['insert_timestamp']]
+    logger.info(f'COURSELEAF_DEPARTMENTS: Prepared {departments.shape[0]} rows for load to SQL Server.')
+
+    load_query = QUERIES['registrar']['insert']['departments']
+    load_data = etl.parameterize_data_frame(departments)
+    try:
+        etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
+        logger.info(f'COURSELEAF_DEPARTMENTS: Load to SQL Server complete.')
+    except Exception as e:
+        logger.error(f'COURSELEAF_DEPARTMENTS: {str(e)}')
 
 def extract_and_load_courseleaf_roles():
     """Retrieve role membership data from CourseLeaf database file, transform results, and load to SQL Server.
@@ -141,17 +187,13 @@ def extract_and_load_courseleaf_roles():
     in a kinda bizarre way, but who I am to judge) there are more transformation steps in this part of the data load
     than there are for the other tables.
     """
-    try:
-        if not os.path.exists(LOCAL_PATH_TO_DB):
-            raise ValueError(f'No database file found at {LOCAL_PATH_TO_DB}')
-    except Exception as e:
-        logging.error(str(e))
-        raise
-
     # EXTRACT ROLE DATA FROM SQLITE DATABASE
     
     extract_query = QUERIES['courseleaf']['select']['roles']
-    extract_results = etl.extract_from_sqlite(LOCAL_PATH_TO_DB, extract_query)
+    try:
+        extract_results = etl.extract_from_sqlite(LOCAL_PATH_TO_DB, extract_query)
+    except Exception as e:
+        logger.error(str(e))
     roles = etl.query_results_to_dataframe(extract_results, ['role', 'members', 'email'])
     logger.info(f'COURSELEAF_ROLES: Read {roles.shape[0]} rows from SQLite database.')
 
@@ -202,14 +244,74 @@ def extract_and_load_courseleaf_roles():
     except Exception as e:
         logger.error(str(e))
 
-def load_courseleaf_subjects():
-    pass
+def extract_and_load_courseleaf_subjects():
+    """
+    """
+    extract_query = QUERIES['courseleaf']['select']['subjects']
+    try:
+        extract_results = etl.extract_from_sqlite(LOCAL_PATH_TO_DB, extract_query)
+    except Exception as e:
+        logger.error(f'COURSELEAF_SUBJECTS: {str(e)}')
+    columns = ['subject_code', 'subject', 'dept_no']
+    subjects = etl.query_results_to_dataframe(extract_results, columns)
+    logger.info(f'COURSELEAF_SUBJECTS: Read {subjects.shape[0]} rows from SQLite database.')
 
-def load_courseleaf_users():
-    pass
+    subjects.fillna('', inplace = True)
+    subjects['load_id'] = get_next_load_id('subjects')
+    subjects['insert_timestamp'] = datetime.now()
+    subjects = subjects[['load_id'] + columns + ['insert_timestamp']]
+    logger.info(f'COURSELEAF_SUBJECTS: Prepared {subjects.shape[0]} rows for load to SQL Server.')
 
-def load_courseleaf_data():
-    pass
+    load_query = QUERIES['registrar']['insert']['subjects']
+    load_data = etl.parameterize_data_frame(subjects)
+    try:
+        etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
+        logger.info(f'COURSELEAF_SUBJECTS: Load to SQL Server complete.')
+    except Exception as e:
+        logger.error(f'COURSELEAF_SUBJECTS: {str(e)}')
+
+def extract_and_load_courseleaf_users():
+    """
+    """
+    extract_query = QUERIES['courseleaf']['select']['users']
+    try:
+        extract_results = etl.extract_from_sqlite(LOCAL_PATH_TO_DB, extract_query)
+    except Exception as e:
+        logger.error(f'COURSELEAF_USERS: {str(e)}')
+    columns = ['uin', 'last_name', 'first_name', 'email']
+    users = etl.query_results_to_dataframe(extract_results, columns)
+    logger.info(f'COURSELEAF_USERS: Read {users.shape[0]} rows from SQLite database.')
+
+    users.fillna('', inplace = True)
+    users['load_id'] = get_next_load_id('users')
+    users['insert_timestamp'] = datetime.now()
+    users = users[['load_id'] + columns + ['insert_timestamp']]
+    logger.info(f'COURSELEAF_USERS: Prepared {users.shape[0]} rows for load to SQL Server.')
+
+    load_query = QUERIES['registrar']['insert']['users']
+    load_data = etl.parameterize_data_frame(users)
+    try:
+        etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
+        logger.info(f'COURSELEAF_USERS: Load to SQL Server complete.')
+    except Exception as e:
+        logger.error(f'COURSELEAF_USERS: {str(e)}')
+
+def execute_courseleaf_data_load():
+    """ This just runs all of the other CourseLeaf ETL functions. Is this modularity?
+    """
+    # Need to manually truncate certain current_ tables that don't yet account for historical
+    # data in their triggers. I tried just doing a truncate in each trigger, but turns out that
+    # that truncates after every ROW in the current implementation. This isn't a long term solution
+    # but it's the best I can do right now.
+    for table in ['crosslists', 'departments', 'subjects', 'users']:
+        truncate_query = QUERIES['registrar']['truncate']['current'][table]
+        misc.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
+
+    extract_and_load_courseleaf_courses()
+    extract_and_load_courseleaf_departments()
+    extract_and_load_courseleaf_roles()
+    extract_and_load_courseleaf_subjects()
+    extract_and_load_courseleaf_users()
 
 ######################################################################################################
 # CODE EXECUTION
@@ -218,7 +320,7 @@ def load_courseleaf_data():
 def main():
     import_complete = import_database_file()
     if import_complete:
-        extract_and_load_courseleaf_roles()
+        execute_courseleaf_data_load()
 
 if __name__ == "__main__":
     main()

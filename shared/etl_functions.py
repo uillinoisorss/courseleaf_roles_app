@@ -1,4 +1,5 @@
 import logging
+import os
 import sqlite3 as sqlite
 
 import oracledb
@@ -48,6 +49,12 @@ def extract_from_oracle(dsn, user, password, query, parameters = None):
 
 # Not concerned about parameterized queries for SQLite since I won't be using any for this project.
 def extract_from_sqlite(path_to_db, query):
+    try:
+        if not os.path.exists(path_to_db):
+            raise ValueError(f'No database file found at {path_to_db}')
+    except Exception as e:
+        logging.error(str(e))
+        raise
     connection = sqlite.connect(path_to_db)
     cursor = connection.cursor()
     try:

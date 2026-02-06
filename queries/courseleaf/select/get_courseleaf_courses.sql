@@ -3,7 +3,7 @@ SELECT
 	code AS course,
 	dept AS subject_code,
 	SUBSTR(code, LENGTH(dept) + 2) AS course_no, -- +2 excludes space between subject code and course no
-	title
+	title AS course_title
 FROM
 	course
 WHERE
@@ -16,6 +16,9 @@ WHERE
 	-- column. This filter excludes those courses since I'm not sure what to do
 	-- with them and they seem more like data artifacts than live datapoints.
 	AND SUBSTR(code, 1, LENGTH(dept)) = dept
+	-- This excludes more bad data where the course number is either missing
+	-- or malformed (all course numbers should be 3 digits).
+	AND LENGTH(SUBSTR(code, LENGTH(dept) + 2)) = 3
 ORDER BY
 	code
 ;
