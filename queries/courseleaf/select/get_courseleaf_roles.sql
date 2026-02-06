@@ -1,4 +1,6 @@
 -- Base role data logic
+WITH roles AS
+(
 SELECT 
         s1.value as name, s2.value as members, s3.value as email
     FROM 
@@ -10,4 +12,11 @@ SELECT
     WHERE 
         pages.path = '/courseleaf/roles.html' AND tcdata.tctype = 'tcf'  
         AND s1.part= 'name' AND s2.part= 'members' AND s3.part = 'email'
+)
+SELECT
+	*
+FROM
+	roles
+WHERE
+	roles.members IS NOT NULL
 ;

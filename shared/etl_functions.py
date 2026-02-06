@@ -93,3 +93,4 @@ def insert_to_sql_server(server, user, password, query, parameters = None):
                 cursor.executemany(query, parameters)
     except Exception as e:
         logging.error(f'An exception was raised while connecting to SQL server {server}: {str(e)}')
+        raise

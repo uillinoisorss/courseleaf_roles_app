@@ -1,5 +1,6 @@
 """Complete process for loading CourseLeaf application data to SQL Server database without Azure.
 """
+from datetime import datetime
 import io
 import logging
 import os
@@ -8,6 +9,7 @@ import tempfile
 from timeit import default_timer as timer
 
 from dotenv import load_dotenv
+import pandas as pd
 import paramiko
 from yaml import safe_load as load
 
@@ -61,13 +63,13 @@ def validate_temp_directory():
     """
     if not os.path.exists(LOCAL_TEMP_DIRECTORY):
         try:
-            logger.debug(f'Creating temporary local directory at: {str(LOCAL_TEMP_DIRECTORY)}')
+            logger.info(f'Creating temporary local directory at: {str(LOCAL_TEMP_DIRECTORY)}')
             os.makedirs(LOCAL_TEMP_DIRECTORY)
         except Exception as e:
             logger.error(f'An exception occurred while creating temporary local directory: {str(e)}')
 
     if os.path.exists(LOCAL_PATH_TO_DB):
-        logger.debug(f'Deleting existing database file at: {str(LOCAL_PATH_TO_DB)}')
+        logger.info(f'Deleting existing database file at: {str(LOCAL_PATH_TO_DB)}')
         os.remove(LOCAL_PATH_TO_DB)
 
     logger.info('Temp directory validated.')
@@ -79,6 +81,11 @@ def import_database_file() -> bool:
     Returns:
         bool: True if the database file exists in local storage after import, False otherwise.
     """
+    # TODO delete this after debugging, this clause is just to prevent having to re-import the database file
+    # every time I run the process while debugging.
+    if os.path.exists(LOCAL_PATH_TO_DB):
+        return True
+
     start = timer()
     try:
         # Create SFTP connection
@@ -87,7 +94,7 @@ def import_database_file() -> bool:
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         key = paramiko.RSAKey.from_private_key(io.StringIO(XFERPROD_PKEY))
         ssh.connect(hostname = XFERPROD_HOSTNAME, port = 22, username = XFERPROD_USERNAME, pkey = key)
-        logger.debug(f'Successfully connected via SSH to {str(XFERPROD_HOSTNAME)}')
+        logger.info(f'Successfully connected via SSH to {str(XFERPROD_HOSTNAME)}')
 
         # File transfer
         sftp = ssh.open_sftp()
@@ -114,9 +121,10 @@ def get_next_load_id(table):
         prev_load_id = etl.extract_from_sql_server(server = REG_HOSTNAME, user = REG_USERNAME, password = REG_PASSWORD, query = extract_query)
         # Get the first (only) row returned by the cursor, then get the max_load_id column from that row.
         new_load_id = prev_load_id[0].max_load_id + 1
+        logger.info(f'Next load_id for {table} is {new_load_id}.')
         return new_load_id
     except Exception as e:
-        logging.error(f'An exception was raised while connecting to {str(REG_HOSTNAME)}: {str(e)}')
+        logger.error(f'An exception was raised while connecting to {str(REG_HOSTNAME)}: {str(e)}')
         return -1
 
 def load_courseleaf_courses():
@@ -126,8 +134,72 @@ def load_courseleaf_departments():
     pass
 
 def extract_and_load_courseleaf_roles():
+    """Retrieve role membership data from CourseLeaf database file, transform results, and load to SQL Server.
+
+    Because I'm using a query provided by Leepfrog to get the role membership information (because it's structured
+    in a kinda bizarre way, but who I am to judge) there are more transformation steps in this part of the data load
+    than there are for the other tables.
+    """
+    try:
+        if not os.path.exists(LOCAL_PATH_TO_DB):
+            raise ValueError(f'No database file found at {LOCAL_PATH_TO_DB}')
+    except Exception as e:
+        logging.error(str(e))
+        raise
+
+    # EXTRACT ROLE DATA FROM SQLITE DATABASE
+    
     extract_query = QUERIES['courseleaf']['select']['roles']
+    extract_results = etl.extract_from_sqlite(LOCAL_PATH_TO_DB, extract_query)
+    roles = etl.query_results_to_dataframe(extract_results, ['role', 'members', 'email'])
+    logger.info(f'COURSELEAF_ROLES: Read {roles.shape[0]} rows from SQLite database.')
+
+    # TRANSFORM ROLE DATA TO PREPARE FOR LOAD TO SQL SERVER
+
+    # The roles we're interested are formatted like this: 0000-DEPT Role
+    # To filter out other roles (mostly College level roles), we look only
+    # for roles that contain a hyphen (-) and start with a numeric chatacter.
+    roles = roles[roles['role'].str.contains('-')]
+    roles = roles[roles['role'].str.contains('[0-9]+')]
+
+    # To split the role titles into usable chunks, we first split on the hyphen, extracting the department number:
+    roles[['dept_no', 'role_title']] = roles['role'].astype(str).str.split('-', expand = True)
+
+    # We now split on the first space in what's left to separate the department name from the role title. 
+    # We only look at the first space because role titles can contain multiple spaces.
+    roles[['dept', 'role_title']] = roles['role_title'].astype(str).str.split(' ', n = 1, expand = True)
+    roles = roles[['role', 'dept_no', 'dept', 'role_title', 'members', 'email']]
+    roles.set_index('role', inplace = True)
+
+    # Role members are given by UIN in a single, comma-delimited data element, so we need to break those up. 
+    # This chunk gets the UINs alongside the corresponding role title in tidy row format.
+    members = roles['members'].str.split(',', expand = True)
+    members = members.stack()
+    members.rename("uin", inplace = True)
+    members = members.to_frame()
+    members.dropna(subset = ['uin'], inplace = True) # stack creates extra empty rows that need to be dropped
+
+    # Drop excess data from roles table before joining.
+    roles = roles[['dept_no', 'dept', 'role_title']]
+        
+    # Join role title/department information with UIN data, then set UIN
+    # as the index since that's now the primary key value in our dataset.
+    roles = roles.join(members)
+    roles.reset_index(inplace = True)
+    roles['load_id'] = get_next_load_id('roles')
+    roles['insert_timestamp'] = datetime.now()
+    roles = roles[['load_id', 'role', 'dept_no', 'dept', 'role_title', 'uin', 'insert_timestamp']]
+    logger.info(f'COURSELEAF_ROLES: Prepared {roles.shape[0]} rows for load to SQL Server.')
+
+    # LOAD DATA TO SQL SERVER
+
     load_query = QUERIES['registrar']['insert']['roles']
+    load_data = etl.parameterize_data_frame(roles)
+    try:
+        etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
+        logger.info(f'COURSELEAF_ROLES: Load to SQL Server complete.')
+    except Exception as e:
+        logger.error(str(e))
 
 def load_courseleaf_subjects():
     pass
@@ -143,7 +215,9 @@ def load_courseleaf_data():
 ######################################################################################################
 
 def main():
-    print(get_next_load_id('roles'))
+    import_complete = import_database_file()
+    if import_complete:
+        extract_and_load_courseleaf_roles()
 
 if __name__ == "__main__":
     main()
