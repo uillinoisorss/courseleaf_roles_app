@@ -6,7 +6,7 @@ INSERT INTO
         dept,
         role_title,
         uin,
-        load_timestamp
+        insert_timestamp
     )
 VALUES (
     ?, ?, ?, ?, ?, ?, ?

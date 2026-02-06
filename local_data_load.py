@@ -128,6 +128,7 @@ def get_next_load_id(table):
         return -1
 
 def load_courseleaf_courses():
+    # load_id (int), course (str), subject_code (str), course_no (str), courst_title (str), insert_timestamp (date)
     pass
 
 def load_courseleaf_departments():
