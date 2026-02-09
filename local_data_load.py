@@ -116,8 +116,8 @@ def import_database_file() -> bool:
 
     return os.path.exists(LOCAL_PATH_TO_DB)
 
-def get_next_load_id(table):
-    extract_query = QUERIES['registrar']['select']['load_id'][table]
+def get_next_load_id(table_group, table):
+    extract_query = QUERIES['registrar']['select']['load_id'][table_group][table]
     try:
         prev_load_id = etl.extract_from_sql_server(server = REG_HOSTNAME, user = REG_USERNAME, password = REG_PASSWORD, query = extract_query)
         # Get the first (only) row returned by the cursor, then get the max_load_id column from that row.
@@ -141,12 +141,12 @@ def extract_and_load_courseleaf_courses():
     logger.info(f'COURSELEAF_COURSES: Read {courses.shape[0]} rows from SQLite database.')
 
     courses.fillna('', inplace = True)
-    courses['load_id'] = get_next_load_id('courses')
+    courses['load_id'] = get_next_load_id('courseleaf', 'courses')
     courses['insert_timestamp'] = datetime.now()
     courses = courses[['load_id'] + columns + ['insert_timestamp']]
     logger.info(f'COURSELEAF_COURSES: Prepared {courses.shape[0]} rows for load to SQL Server.')
 
-    load_query = QUERIES['registrar']['insert']['courses']
+    load_query = QUERIES['registrar']['insert']['courseleaf']['courses']
     load_data = etl.parameterize_data_frame(courses)
     try:
         etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
@@ -167,12 +167,12 @@ def extract_and_load_courseleaf_departments():
     logger.info(f'COURSELEAF_DEPARTMENTS: Read {departments.shape[0]} rows from SQLite database.')
 
     departments.fillna('', inplace = True)
-    departments['load_id'] = get_next_load_id('departments')
+    departments['load_id'] = get_next_load_id('courseleaf', 'departments')
     departments['insert_timestamp'] = datetime.now()
     departments = departments[['load_id'] + columns + ['insert_timestamp']]
     logger.info(f'COURSELEAF_DEPARTMENTS: Prepared {departments.shape[0]} rows for load to SQL Server.')
 
-    load_query = QUERIES['registrar']['insert']['departments']
+    load_query = QUERIES['registrar']['insert']['courseleaf']['departments']
     load_data = etl.parameterize_data_frame(departments)
     try:
         etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
@@ -229,14 +229,14 @@ def extract_and_load_courseleaf_roles():
     # as the index since that's now the primary key value in our dataset.
     roles = roles.join(members)
     roles.reset_index(inplace = True)
-    roles['load_id'] = get_next_load_id('roles')
+    roles['load_id'] = get_next_load_id('courseleaf', 'roles')
     roles['insert_timestamp'] = datetime.now()
     roles = roles[['load_id', 'role', 'dept_no', 'dept', 'role_title', 'uin', 'insert_timestamp']]
     logger.info(f'COURSELEAF_ROLES: Prepared {roles.shape[0]} rows for load to SQL Server.')
 
     # LOAD DATA TO SQL SERVER
 
-    load_query = QUERIES['registrar']['insert']['roles']
+    load_query = QUERIES['registrar']['insert']['courseleaf']['roles']
     load_data = etl.parameterize_data_frame(roles)
     try:
         etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
@@ -257,12 +257,12 @@ def extract_and_load_courseleaf_subjects():
     logger.info(f'COURSELEAF_SUBJECTS: Read {subjects.shape[0]} rows from SQLite database.')
 
     subjects.fillna('', inplace = True)
-    subjects['load_id'] = get_next_load_id('subjects')
+    subjects['load_id'] = get_next_load_id('courseleaf', 'subjects')
     subjects['insert_timestamp'] = datetime.now()
     subjects = subjects[['load_id'] + columns + ['insert_timestamp']]
     logger.info(f'COURSELEAF_SUBJECTS: Prepared {subjects.shape[0]} rows for load to SQL Server.')
 
-    load_query = QUERIES['registrar']['insert']['subjects']
+    load_query = QUERIES['registrar']['insert']['courseleaf']['subjects']
     load_data = etl.parameterize_data_frame(subjects)
     try:
         etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
@@ -283,12 +283,12 @@ def extract_and_load_courseleaf_users():
     logger.info(f'COURSELEAF_USERS: Read {users.shape[0]} rows from SQLite database.')
 
     users.fillna('', inplace = True)
-    users['load_id'] = get_next_load_id('users')
+    users['load_id'] = get_next_load_id('courseleaf', 'users')
     users['insert_timestamp'] = datetime.now()
     users = users[['load_id'] + columns + ['insert_timestamp']]
     logger.info(f'COURSELEAF_USERS: Prepared {users.shape[0]} rows for load to SQL Server.')
 
-    load_query = QUERIES['registrar']['insert']['users']
+    load_query = QUERIES['registrar']['insert']['courseleaf']['users']
     load_data = etl.parameterize_data_frame(users)
     try:
         etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
@@ -297,7 +297,7 @@ def extract_and_load_courseleaf_users():
         logger.error(f'COURSELEAF_USERS: {str(e)}')
 
 def execute_courseleaf_data_load():
-    """ This just runs all of the other CourseLeaf ETL functions. Is this modularity?
+    """This just runs all of the other CourseLeaf ETL functions. Is this modularity?
     """
     # Need to manually truncate certain current_ tables that don't yet account for historical
     # data in their triggers. I tried just doing a truncate in each trigger, but turns out that
@@ -312,6 +312,23 @@ def execute_courseleaf_data_load():
     extract_and_load_courseleaf_roles()
     extract_and_load_courseleaf_subjects()
     extract_and_load_courseleaf_users()
+
+def truncate_database_tables():
+    """Truncates all application database tables. Only to be used when resetting database for testing purposes.
+    Probably dangerous to leave laying around, but whatever.
+    """
+    # Banner
+    for table in ['courses', 'departments', 'subjects', 'user_info']:
+        truncate_query = QUERIES['registrar']['truncate']['banner'][table]
+        misc.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
+    # Courseleaf
+    for table in ['courses', 'departments', 'roles', 'subjects', 'users']:
+        truncate_query = QUERIES['registrar']['truncate']['courseleaf'][table]
+        misc.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
+    # Current
+    for table in ['courses', 'crosslists', 'departments', 'roles', 'subjects', 'users']:
+        truncate_query = QUERIES['registrar']['truncate']['current'][table]
+        misc.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
 
 ######################################################################################################
 # CODE EXECUTION
