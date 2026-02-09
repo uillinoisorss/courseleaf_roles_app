@@ -45,6 +45,7 @@ def extract_from_oracle(dsn, user, password, query, parameters = None):
                 return_data = cursor.fetchall()
     except Exception as e:
         logging.error(f'An exception was raised while connecting to Oracle DB {dsn}: {str(e)}')
+        raise
     return return_data
 
 # Not concerned about parameterized queries for SQLite since I won't be using any for this project.

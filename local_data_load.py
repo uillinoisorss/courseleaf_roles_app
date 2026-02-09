@@ -4,7 +4,6 @@ from datetime import datetime
 import io
 import logging
 import os
-import sys
 import tempfile
 from timeit import default_timer as timer
 
@@ -27,8 +26,8 @@ REG_USERNAME = str(os.getenv('REG_USERNAME'))
 REG_PASSWORD = str(os.getenv('REG_PASSWORD'))
 
 REPTPROD_HOSTNAME = str(os.getenv('REPTPROD_HOST'))
-REPTPROD_USERNAME = str(os.getenv('REPTPROD_HOST'))
-REPTPROD_PASSWORD = str(os.getenv('REPTPROD_HOST'))
+REPTPROD_USERNAME = str(os.getenv('REPTPROD_USERNAME'))
+REPTPROD_PASSWORD = str(os.getenv('REPTPROD_PASSWORD'))
 
 XFERPROD_HOSTNAME = str(os.getenv('XFERPROD_HOST'))
 XFERPROD_USERNAME = str(os.getenv('XFERPROD_USERNAME'))
@@ -127,6 +126,38 @@ def get_next_load_id(table_group, table):
     except Exception as e:
         logger.error(f'An exception was raised while connecting to {str(REG_HOSTNAME)}: {str(e)}')
         return -1
+    
+# BANNER ETL FUNCTIONS
+    
+def extract_and_load_banner_courses():
+    """
+    """
+    extract_query = QUERIES['banner']['select']['courses']
+    try:
+        # This query takes a term parameter...
+        # TODO automatically populate this from the OR_Maintenance terms table (and also the next 2 terms, per discussion w/ Rod)
+        extract_results = etl.extract_from_oracle(REPTPROD_HOSTNAME, REPTPROD_USERNAME, REPTPROD_PASSWORD, extract_query, parameters = ['120261'])
+    except Exception as e:
+        logger.error(f'BANNER_COURSES: {str(e)}')
+    columns = ['course', 'subject_code', 'course_no', 'course_title', 'college', 'dept_no', 'control_code', 'course_id', 'course_start_term', 'course_end_term', 'course_effective_term', 'status']
+    courses = etl.query_results_to_dataframe(extract_results, columns)
+    logger.info(f'BANNER_COURSES: Read {courses.shape[0]} rows from REPTPROD.')
+
+    courses.fillna('', inplace = True)
+    courses['load_id'] = get_next_load_id('banner', 'courses')
+    courses['insert_timestamp'] = datetime.now()
+    courses = courses[['load_id'] + columns + ['insert_timestamp']]
+    logger.info(f'BANNER_COURSES: Prepared {courses.shape[0]} rows for load to SQL Server.')
+
+    load_query = QUERIES['registrar']['insert']['banner']['courses']
+    load_data = etl.parameterize_data_frame(courses)
+    try:
+        etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
+        logger.info(f'BANNER_COURSES: Load to SQL Server complete.')
+    except Exception as e:
+        logger.error(f'BANNER_COURSES: {str(e)}')
+
+# COURSELEAF ETL FUNCTIONS
 
 def extract_and_load_courseleaf_courses():
     """
@@ -136,6 +167,7 @@ def extract_and_load_courseleaf_courses():
         extract_results = etl.extract_from_sqlite(LOCAL_PATH_TO_DB, extract_query)
     except Exception as e:
         logger.error(f'COURSELEAF_COURSES: {str(e)}')
+        raise
     columns = ['course', 'subject_code', 'course_no', 'course_title']
     courses = etl.query_results_to_dataframe(extract_results, columns)
     logger.info(f'COURSELEAF_COURSES: Read {courses.shape[0]} rows from SQLite database.')
@@ -296,6 +328,13 @@ def extract_and_load_courseleaf_users():
     except Exception as e:
         logger.error(f'COURSELEAF_USERS: {str(e)}')
 
+# AGGREGATE FUNCTIONS
+
+def execute_banner_data_load():
+    """Same thing as below but for the Banner stuff we care about.
+    """
+    extract_and_load_banner_courses()
+
 def execute_courseleaf_data_load():
     """This just runs all of the other CourseLeaf ETL functions. Is this modularity?
     """
@@ -335,9 +374,11 @@ def truncate_database_tables():
 ######################################################################################################
 
 def main():
+    # truncate_database_tables()
     import_complete = import_database_file()
     if import_complete:
-        execute_courseleaf_data_load()
+        execute_banner_data_load()
+        extract_and_load_banner_courses()
 
 if __name__ == "__main__":
     main()
