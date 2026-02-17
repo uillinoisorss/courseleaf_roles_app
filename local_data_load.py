@@ -335,22 +335,22 @@ def execute_banner_data_load():
     """
     extract_and_load_banner_courses()
 
+    # Manually call SP to update crosslists table after course load is done:
+    sp_query = QUERIES['registrar']['stored_procedures']['update_current_crosslists']
+    misc.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, sp_query)
+
 def execute_courseleaf_data_load():
     """This just runs all of the other CourseLeaf ETL functions. Is this modularity?
     """
-    # Need to manually truncate certain current_ tables that don't yet account for historical
-    # data in their triggers. I tried just doing a truncate in each trigger, but turns out that
-    # that truncates after every ROW in the current implementation. This isn't a long term solution
-    # but it's the best I can do right now.
-    for table in ['crosslists', 'departments', 'subjects', 'users']:
-        truncate_query = QUERIES['registrar']['truncate']['current'][table]
-        misc.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
-
     extract_and_load_courseleaf_courses()
     extract_and_load_courseleaf_departments()
     extract_and_load_courseleaf_roles()
     extract_and_load_courseleaf_subjects()
     extract_and_load_courseleaf_users()
+
+    # Manually call SP to end old roles where called for:
+    sp_query = QUERIES['registrar']['stored_procedures']['deactivate_old_roles']
+    misc.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, sp_query)
 
 def truncate_database_tables():
     """Truncates all application database tables. Only to be used when resetting database for testing purposes.
@@ -374,11 +374,14 @@ def truncate_database_tables():
 ######################################################################################################
 
 def main():
-    # truncate_database_tables()
+    # This will truncate all app database tables before proceeding with data load.
+    # For testing only!!! Remove this before running in production.
+    truncate_database_tables()
     import_complete = import_database_file()
     if import_complete:
         execute_banner_data_load()
-        extract_and_load_banner_courses()
+        execute_courseleaf_data_load()
+    logger.info('COURSELEAF_CONTACTS: Data load complete.')
 
 if __name__ == "__main__":
     main()
