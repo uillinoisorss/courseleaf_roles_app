@@ -66,3 +66,4 @@ registrar:
       users: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[current_users] ;
   stored_procedures:
     deactivate_old_roles: EXEC [CourseLeaf_Contacts].[dbo].[deactivate_old_roles];
+    update_current_crosslists: EXEC [CourseLeaf_Contacts].[dbo].[update_current_crosslists];
