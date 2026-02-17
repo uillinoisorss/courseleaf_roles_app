@@ -13,6 +13,7 @@ def run_sql_server_query(server, user, password, query, parameters = None):
                     cursor.execute(query, parameters)
                 else:
                     cursor.execute(query)
+                logging.info(f'Executed query: {query} with parameters {parameters}')
     except Exception as e:
         logging.error(f'An exception was raised while connecting to SQL Server {server}: {str(e)}')
         raise
