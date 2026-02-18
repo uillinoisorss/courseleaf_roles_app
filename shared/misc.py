@@ -1,4 +1,5 @@
 import logging
+import os
 
 import pyodbc
 
@@ -17,3 +18,7 @@ def run_sql_server_query(server, user, password, query, parameters = None):
     except Exception as e:
         logging.error(f'An exception was raised while connecting to SQL Server {server}: {str(e)}')
         raise
+
+
+def generate_query_yaml(query_dir, yaml_filename):
+    pass
