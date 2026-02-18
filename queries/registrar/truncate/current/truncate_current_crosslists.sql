@@ -1,0 +1,1 @@
+TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[current_crosslists] ;

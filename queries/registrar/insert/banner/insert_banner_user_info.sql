@@ -1,0 +1,19 @@
+INSERT INTO
+    [CourseLeaf_Contacts].[dbo].[banner_user_info]
+    (
+        load_id,
+        uin,
+        last_name,
+        first_name,
+        email,
+        insert_timestamp
+    )
+VALUES
+    (
+        ?,
+        ?,
+        ?,
+        ?,
+        ?,
+        ?
+    )

@@ -1,0 +1,1 @@
+EXEC [CourseLeaf_Contacts].[dbo].[deactivate_old_roles];

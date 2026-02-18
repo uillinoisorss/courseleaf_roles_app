@@ -8,6 +8,11 @@ INSERT INTO
         insert_timestamp
     )
 VALUES (
-    ?, ?, ?, ?, ?, ?
+    ?, 
+    ?, 
+    ?, 
+    ?, 
+    ?, 
+    ?
 )
 ;

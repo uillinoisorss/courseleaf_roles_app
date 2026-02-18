@@ -1,0 +1,1 @@
+EXEC [CourseLeaf_Contacts].[dbo].[update_current_crosslists];
