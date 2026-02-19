@@ -10,9 +10,9 @@ FROM
 	SATURN.STVTERM
 WHERE
 	SUBSTR(STVTERM_CODE, 1, 1) = '1' -- only Urbana-Champaign terms
-	AND SUBSTR(STVTERM_CODE, 2, 5) <> '99999' -- exclude end of time term code
-	AND STVTERM_DESC NOT LIKE '%Global Campus%'
-	AND STVTERM_DESC NOT LIKE '%Summer2%'
+	AND STVTERM_CODE < '199999'
+    AND STVTERM_CODE >= '120048' -- omit pre-Banner terms
+	AND STVTERM_TRMT_CODE IN ('S','W') -- only Semester and Winter terms, excludes Academic Year terms and Global Campus terms
 ORDER BY
 	STVTERM_CODE
 ;
