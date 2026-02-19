@@ -12,7 +12,7 @@ import pandas as pd
 import paramiko
 from yaml import safe_load as load
 
-import shared.misc as misc
+import shared.query_functions as query_functions
 import shared.etl_functions as etl
 
 ######################################################################################################
@@ -337,7 +337,7 @@ def execute_banner_data_load():
 
     # Manually call SP to update crosslists table after course load is done:
     sp_query = QUERIES['registrar']['stored_procedures']['update_current_crosslists']
-    misc.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, sp_query)
+    query_functions.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, sp_query)
 
 def execute_courseleaf_data_load():
     """This just runs all of the other CourseLeaf ETL functions. Is this modularity?
@@ -350,7 +350,7 @@ def execute_courseleaf_data_load():
 
     # Manually call SP to end old roles where called for:
     sp_query = QUERIES['registrar']['stored_procedures']['deactivate_old_roles']
-    misc.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, sp_query)
+    query_functions.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, sp_query)
 
 def truncate_database_tables():
     """Truncates all application database tables. Only to be used when resetting database for testing purposes.
@@ -359,15 +359,15 @@ def truncate_database_tables():
     # Banner
     for table in ['courses', 'departments', 'subjects', 'user_info']:
         truncate_query = QUERIES['registrar']['truncate']['banner'][table]
-        misc.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
+        query_functions.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
     # Courseleaf
     for table in ['courses', 'departments', 'roles', 'subjects', 'users']:
         truncate_query = QUERIES['registrar']['truncate']['courseleaf'][table]
-        misc.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
+        query_functions.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
     # Current
     for table in ['courses', 'crosslists', 'departments', 'roles', 'subjects', 'users']:
         truncate_query = QUERIES['registrar']['truncate']['current'][table]
-        misc.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
+        query_functions.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
 
 ######################################################################################################
 # CODE EXECUTION

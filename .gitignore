@@ -1,5 +1,7 @@
 .vscode
 todo.txt
+test_queries/
+test.yaml
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
