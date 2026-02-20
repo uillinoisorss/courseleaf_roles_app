@@ -50,7 +50,10 @@ logging.basicConfig(filename = 'dev.log', encoding = 'utf-8', level = logging.DE
 # SQL QUERIES 
 ######################################################################################################
 
-with open('queries.yaml') as query_file:
+QUERY_FILE_PATH = 'test.yaml'
+# QUERY_FILE_PATH = 'queries.yaml'
+
+with open(QUERY_FILE_PATH) as query_file:
         QUERIES = load(query_file)
 
 ######################################################################################################
@@ -115,13 +118,13 @@ def import_database_file() -> bool:
 
     return os.path.exists(LOCAL_PATH_TO_DB)
 
-def get_next_load_id(table_group, table):
-    extract_query = QUERIES['registrar']['select']['load_id'][table_group][table]
+def get_next_load_id(table_group):
+    extract_query = QUERIES['reg']['select']['loadid'][table_group]
     try:
         prev_load_id = etl.extract_from_sql_server(server = REG_HOSTNAME, user = REG_USERNAME, password = REG_PASSWORD, query = extract_query)
         # Get the first (only) row returned by the cursor, then get the max_load_id column from that row.
         new_load_id = prev_load_id[0].max_load_id + 1
-        logger.info(f'Next load_id for {table} is {new_load_id}.')
+        logger.info(f'Next load_id for {table_group} tables is {new_load_id}.')
         return new_load_id
     except Exception as e:
         logger.error(f'An exception was raised while connecting to {str(REG_HOSTNAME)}: {str(e)}')
@@ -144,12 +147,12 @@ def extract_and_load_banner_courses():
     logger.info(f'BANNER_COURSES: Read {courses.shape[0]} rows from REPTPROD.')
 
     courses.fillna('', inplace = True)
-    courses['load_id'] = get_next_load_id('banner', 'courses')
+    courses['load_id'] = get_next_load_id('banner')
     courses['insert_timestamp'] = datetime.now()
     courses = courses[['load_id'] + columns + ['insert_timestamp']]
     logger.info(f'BANNER_COURSES: Prepared {courses.shape[0]} rows for load to SQL Server.')
 
-    load_query = QUERIES['registrar']['insert']['banner']['courses']
+    load_query = QUERIES['reg']['insert']['banner']['courses']
     load_data = etl.parameterize_data_frame(courses)
     try:
         etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
@@ -173,12 +176,12 @@ def extract_and_load_courseleaf_courses():
     logger.info(f'COURSELEAF_COURSES: Read {courses.shape[0]} rows from SQLite database.')
 
     courses.fillna('', inplace = True)
-    courses['load_id'] = get_next_load_id('courseleaf', 'courses')
+    courses['load_id'] = get_next_load_id('courseleaf')
     courses['insert_timestamp'] = datetime.now()
     courses = courses[['load_id'] + columns + ['insert_timestamp']]
     logger.info(f'COURSELEAF_COURSES: Prepared {courses.shape[0]} rows for load to SQL Server.')
 
-    load_query = QUERIES['registrar']['insert']['courseleaf']['courses']
+    load_query = QUERIES['reg']['insert']['courseleaf']['courses']
     load_data = etl.parameterize_data_frame(courses)
     try:
         etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
@@ -199,12 +202,12 @@ def extract_and_load_courseleaf_departments():
     logger.info(f'COURSELEAF_DEPARTMENTS: Read {departments.shape[0]} rows from SQLite database.')
 
     departments.fillna('', inplace = True)
-    departments['load_id'] = get_next_load_id('courseleaf', 'departments')
+    departments['load_id'] = get_next_load_id('courseleaf')
     departments['insert_timestamp'] = datetime.now()
     departments = departments[['load_id'] + columns + ['insert_timestamp']]
     logger.info(f'COURSELEAF_DEPARTMENTS: Prepared {departments.shape[0]} rows for load to SQL Server.')
 
-    load_query = QUERIES['registrar']['insert']['courseleaf']['departments']
+    load_query = QUERIES['reg']['insert']['courseleaf']['departments']
     load_data = etl.parameterize_data_frame(departments)
     try:
         etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
@@ -261,14 +264,14 @@ def extract_and_load_courseleaf_roles():
     # as the index since that's now the primary key value in our dataset.
     roles = roles.join(members)
     roles.reset_index(inplace = True)
-    roles['load_id'] = get_next_load_id('courseleaf', 'roles')
+    roles['load_id'] = get_next_load_id('courseleaf')
     roles['insert_timestamp'] = datetime.now()
     roles = roles[['load_id', 'role', 'dept_no', 'dept', 'role_title', 'uin', 'insert_timestamp']]
     logger.info(f'COURSELEAF_ROLES: Prepared {roles.shape[0]} rows for load to SQL Server.')
 
     # LOAD DATA TO SQL SERVER
 
-    load_query = QUERIES['registrar']['insert']['courseleaf']['roles']
+    load_query = QUERIES['reg']['insert']['courseleaf']['roles']
     load_data = etl.parameterize_data_frame(roles)
     try:
         etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
@@ -289,12 +292,12 @@ def extract_and_load_courseleaf_subjects():
     logger.info(f'COURSELEAF_SUBJECTS: Read {subjects.shape[0]} rows from SQLite database.')
 
     subjects.fillna('', inplace = True)
-    subjects['load_id'] = get_next_load_id('courseleaf', 'subjects')
+    subjects['load_id'] = get_next_load_id('courseleaf')
     subjects['insert_timestamp'] = datetime.now()
     subjects = subjects[['load_id'] + columns + ['insert_timestamp']]
     logger.info(f'COURSELEAF_SUBJECTS: Prepared {subjects.shape[0]} rows for load to SQL Server.')
 
-    load_query = QUERIES['registrar']['insert']['courseleaf']['subjects']
+    load_query = QUERIES['reg']['insert']['courseleaf']['subjects']
     load_data = etl.parameterize_data_frame(subjects)
     try:
         etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
@@ -315,18 +318,22 @@ def extract_and_load_courseleaf_users():
     logger.info(f'COURSELEAF_USERS: Read {users.shape[0]} rows from SQLite database.')
 
     users.fillna('', inplace = True)
-    users['load_id'] = get_next_load_id('courseleaf', 'users')
+    users['load_id'] = get_next_load_id('courseleaf')
     users['insert_timestamp'] = datetime.now()
     users = users[['load_id'] + columns + ['insert_timestamp']]
     logger.info(f'COURSELEAF_USERS: Prepared {users.shape[0]} rows for load to SQL Server.')
 
-    load_query = QUERIES['registrar']['insert']['courseleaf']['users']
+    load_query = QUERIES['reg']['insert']['courseleaf']['users']
     load_data = etl.parameterize_data_frame(users)
     try:
         etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
         logger.info(f'COURSELEAF_USERS: Load to SQL Server complete.')
     except Exception as e:
         logger.error(f'COURSELEAF_USERS: {str(e)}')
+
+# POWERBI ETL FUNCTIONS
+
+# Putting this here in case I decide that I need to build more specialized presentation tables for PowerBI
 
 # AGGREGATE FUNCTIONS
 
@@ -336,7 +343,7 @@ def execute_banner_data_load():
     extract_and_load_banner_courses()
 
     # Manually call SP to update crosslists table after course load is done:
-    sp_query = QUERIES['registrar']['stored_procedures']['update_current_crosslists']
+    sp_query = QUERIES['reg']['stored_procedures']['update_current_crosslists']
     query_functions.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, sp_query)
 
 def execute_courseleaf_data_load():
@@ -349,7 +356,7 @@ def execute_courseleaf_data_load():
     extract_and_load_courseleaf_users()
 
     # Manually call SP to end old roles where called for:
-    sp_query = QUERIES['registrar']['stored_procedures']['deactivate_old_roles']
+    sp_query = QUERIES['reg']['stored_procedures']['deactivate_old_roles']
     query_functions.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, sp_query)
 
 def truncate_database_tables():
@@ -357,23 +364,36 @@ def truncate_database_tables():
     Probably dangerous to leave laying around, but whatever.
     """
     # Banner
-    for table in ['courses', 'departments', 'subjects', 'user_info']:
-        truncate_query = QUERIES['registrar']['truncate']['banner'][table]
+    for table in ['courses', 'departments', 'subjects', 'userinfo']:
+        truncate_query = QUERIES['reg']['truncate']['banner'][table]
         query_functions.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
     # Courseleaf
     for table in ['courses', 'departments', 'roles', 'subjects', 'users']:
-        truncate_query = QUERIES['registrar']['truncate']['courseleaf'][table]
+        truncate_query = QUERIES['reg']['truncate']['courseleaf'][table]
         query_functions.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
     # Current
     for table in ['courses', 'crosslists', 'departments', 'roles', 'subjects', 'users']:
-        truncate_query = QUERIES['registrar']['truncate']['current'][table]
+        truncate_query = QUERIES['reg']['truncate']['current'][table]
         query_functions.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
+
+def quick_query_test():
+    extract_query = QUERIES['banner']['select']['courses']
+    try:
+        # This query takes a term parameter...
+        # TODO automatically populate this from the OR_Maintenance terms table (and also the next 2 terms, per discussion w/ Rod)
+        extract_results = etl.extract_from_oracle(REPTPROD_HOSTNAME, REPTPROD_USERNAME, REPTPROD_PASSWORD, extract_query, parameters = ['120261'])
+    except Exception as e:
+        logger.error(f'BANNER_COURSES: {str(e)}')
+    columns = ['course', 'subject_code', 'course_no', 'course_title', 'college', 'dept_no', 'control_code', 'course_id', 'course_start_term', 'course_end_term', 'course_effective_term', 'status']
+    courses = etl.query_results_to_dataframe(extract_results, columns)
+    logger.info(f'BANNER_COURSES: Read {courses.shape[0]} rows from REPTPROD.')
 
 ######################################################################################################
 # CODE EXECUTION
 ######################################################################################################
 
 def main():
+    query_functions.generate_query_yaml('queries', 'test.yaml')
     # This will truncate all app database tables before proceeding with data load.
     # For testing only!!! Remove this before running in production.
     truncate_database_tables()

@@ -1,0 +1,1 @@
+EXEC [CourseLeaf_Contacts].[dbo].[generate_powerbi_crosslists];

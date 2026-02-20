@@ -25,7 +25,7 @@ def run_sql_server_query(server, user, password, query, parameters = None):
 
 # Functions for creating SQL query YAML file
 
-def strip_query(path, drop_semicolon = False):
+def strip_query(path, drop_semicolon = False, param_prefix = None):
     """
     """
     with open(path) as file:
@@ -34,6 +34,9 @@ def strip_query(path, drop_semicolon = False):
     query = ''.join(lines)
     if drop_semicolon:
         query = query.strip(';') # remove trailing semicolon (also leading, if there's one there for some reason)
+    if param_prefix:
+        # I could put a list of expected parameter prefix characters in this re but I'm kinda scared it'll affect queries elsewhere
+        query = re.sub(r'[&]{1}', param_prefix, query)
     return re.sub(r'\s+', ' ', query).strip()
 
 def get_paths(parent):
@@ -65,15 +68,22 @@ def make_dict_from_paths(paths):
 
     tree_path = {}
     for path in paths:
-        query = strip_query(path)
+        query = strip_query(path, drop_semicolon = True, param_prefix = ':')
 
         # Split into list and remove leading '/' if present
         levels = path.lstrip('\\').split('\\')
         
          # Get the last element in levels (the filename) and remove the file extension
         file = levels.pop()[:-4]
-        # Individual queries will be referred to by the last chunk of their filename
-        file_key = file.split('_')[-1]
+
+        # Determine the key that will be used to identify the individual query
+        if '_sp_' in file:
+            # If the query is a stored procedure call, it gets a more verbose key to distinguish it
+            file_key = file[file.find('_sp_') + 4:]
+            pass
+        else:
+            # Otherwise, individual queries will be referred to by the last chunk of their filename
+            file_key = file.split('_')[-1]
 
 
         acc = tree_path # assign existing tree structure to acc
@@ -96,5 +106,8 @@ def generate_query_yaml(query_dir, yaml_filename):
     paths = get_paths(query_dir)
     # Specify the 'queries' key to unwrap the highest level directory
     dict = make_dict_from_paths(paths)['queries']
+    # Exclude the 'create_database' T-SQL file if it gets included in the dict
+    if 'database' in dict:
+        del dict['database']
     with open(yaml_filename, 'w') as stream:
-        yaml.dump(dict, stream)
+        yaml.dump(dict, stream, width = float('inf')) # width = float('inf') ensures that whole queries get dumped to a single line
