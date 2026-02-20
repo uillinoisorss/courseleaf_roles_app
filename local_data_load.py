@@ -376,18 +376,6 @@ def truncate_database_tables():
         truncate_query = QUERIES['reg']['truncate']['current'][table]
         query_functions.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
 
-def quick_query_test():
-    extract_query = QUERIES['banner']['select']['courses']
-    try:
-        # This query takes a term parameter...
-        # TODO automatically populate this from the OR_Maintenance terms table (and also the next 2 terms, per discussion w/ Rod)
-        extract_results = etl.extract_from_oracle(REPTPROD_HOSTNAME, REPTPROD_USERNAME, REPTPROD_PASSWORD, extract_query, parameters = ['120261'])
-    except Exception as e:
-        logger.error(f'BANNER_COURSES: {str(e)}')
-    columns = ['course', 'subject_code', 'course_no', 'course_title', 'college', 'dept_no', 'control_code', 'course_id', 'course_start_term', 'course_end_term', 'course_effective_term', 'status']
-    courses = etl.query_results_to_dataframe(extract_results, columns)
-    logger.info(f'BANNER_COURSES: Read {courses.shape[0]} rows from REPTPROD.')
-
 ######################################################################################################
 # CODE EXECUTION
 ######################################################################################################
