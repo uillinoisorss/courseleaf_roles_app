@@ -1,4 +1,6 @@
 .vscode
+*.code-workspace
+
 todo.txt
 test_queries/
 test.yaml

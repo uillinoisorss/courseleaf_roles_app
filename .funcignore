@@ -9,3 +9,4 @@ test
 .venv
 local_data_load.py
 todo.txt
+*.code-workspace
