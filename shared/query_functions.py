@@ -30,7 +30,7 @@ def run_sql_server_query(server, user, password, query, parameters = None):
                     logging.info(f'Executed query: {query} with parameters {parameters}')
                 else:
                     cursor.execute(query)
-                    logging.info(f'Execute query: {query}')
+                    logging.info(f'Executed query: {query}')
     except Exception as e:
         logging.error(f'An exception was raised while connecting to SQL Server {server}: {str(e)}')
         raise
@@ -159,5 +159,8 @@ def generate_query_yaml(query_dir, yaml_filename):
         del dict['database']
     with open(yaml_filename, 'w') as stream:
         yaml.dump(dict, stream, width = float('inf')) # width = float('inf') ensures that whole queries get dumped to a single line
-        head, tail = os.path.split(yaml_filename)
-        logging.info(f'Query file {tail} has been written to {head}')
+        head, tail = os.path.split(yaml_filename) # head will be empty if the filename doesn't contain a path
+        if not head:
+            logging.info(f'Query file {tail} has been written to the active directory')
+        else:
+            logging.info(f'Query file {tail} has been written to {head}')

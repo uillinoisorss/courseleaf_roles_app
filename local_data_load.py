@@ -12,7 +12,7 @@ import pandas as pd
 import paramiko
 from yaml import safe_load as load
 
-import shared.query_functions as query_functions
+import shared.query_functions as qf
 import shared.etl_functions as etl
 
 ######################################################################################################
@@ -52,6 +52,9 @@ logging.basicConfig(filename = 'dev.log', encoding = 'utf-8', level = logging.DE
 
 QUERY_FILE_PATH = 'test.yaml'
 # QUERY_FILE_PATH = 'queries.yaml'
+
+if not os.path.exists(QUERY_FILE_PATH):
+    qf.generate_query_yaml('queries', QUERY_FILE_PATH)
 
 with open(QUERY_FILE_PATH) as query_file:
         QUERIES = load(query_file)
@@ -118,21 +121,65 @@ def import_database_file() -> bool:
 
     return os.path.exists(LOCAL_PATH_TO_DB)
 
-def get_next_load_id(table_group):
+def get_load_id(table_group):
+    """Get the current load id number for the specified table group. Data loads in the CourseLeaf database 
+    are centrally tracked in the _imports tables, which allows all of the data that is loaded at one time 
+    to be associated with a single numeric identifier. This query looks at the _imports table for specified 
+    table group and finds the maximum existing load_id. This value is then passed to the remaining load functions.
+
+    Args:
+        table_group (str): the name of the table group for which to retrieve the load id. Right now,
+            the valid table groups are "banner" and "courseleaf".
+
+    Returns:
+        int: current load id for specified table group. If the _imports table for that table group is empty, 
+        the value 0 will be returned. If there is an error while querying the database, -1 will be returned.
+    """
     extract_query = QUERIES['reg']['select']['loadid'][table_group]
     try:
-        prev_load_id = etl.extract_from_sql_server(server = REG_HOSTNAME, user = REG_USERNAME, password = REG_PASSWORD, query = extract_query)
-        # Get the first (only) row returned by the cursor, then get the max_load_id column from that row.
-        new_load_id = prev_load_id[0].max_load_id + 1
-        logger.info(f'Next load_id for {table_group} tables is {new_load_id}.')
-        return new_load_id
+        # need to unpack the value that is retrieved by this query
+        load_id = etl.extract_from_sql_server(server = REG_HOSTNAME, user = REG_USERNAME, password = REG_PASSWORD, query = extract_query)[0][0]
+        logger.info(f'Next load_id for {table_group} tables is {load_id}.')
+        return load_id
     except Exception as e:
         logger.error(f'An exception was raised while connecting to {str(REG_HOSTNAME)}: {str(e)}')
         return -1
     
+def insert_new_import_record(table_group):
+    """Insert a row into the _imports table for a table group, generating a new load_id which is returned
+    by the function.
+
+    I forgot that load_id is identity in the _imports table, lmao
+
+    Args:
+        table_group (str): the name of the table group for which to insert an import record. 
+        Right now, the valid table groups are "banner" and "courseleaf".
+
+    Returns:
+        int: the load_id associated with this import record. See get_next_load_id for details. Returns -1
+            if something goes wrong; 0 if the _imports table is empty; otherwise will return a positive integer.
+    """
+    try:
+        # Create a new import record
+        insert_query = QUERIES['reg']['insert'][table_group]['imports']
+        load_timestamp = datetime.now()
+        params = etl.parameterize_data_frame(pd.DataFrame(data = {'load_timestamp' : [datetime.now()]}))
+        # params = (load_timestamp, )
+        # print(params)
+        etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, insert_query, parameters = params)
+        # Get the new load_id to pass to the remaining functions
+        load_id = get_load_id(table_group)
+        logger.info(f'A {table_group} import record with load_id = {load_id} was inserted at {load_timestamp}')
+    except Exception as e:
+        logger.error(f'Unable to get new load_id for {table_group} tables: an exception was raised while connecting to {str(REG_HOSTNAME)}: {str(e)}')
+        # should this raise the exception instead of returning a value? TODO figure this out later
+        return -1
+
+    return load_id
+    
 # BANNER ETL FUNCTIONS
     
-def extract_and_load_banner_courses():
+def extract_and_load_banner_courses(load_id):
     """
     """
     extract_query = QUERIES['banner']['select']['courses']
@@ -147,7 +194,7 @@ def extract_and_load_banner_courses():
     logger.info(f'BANNER_COURSES: Read {courses.shape[0]} rows from REPTPROD.')
 
     courses.fillna('', inplace = True)
-    courses['load_id'] = get_next_load_id('banner')
+    courses['load_id'] = load_id
     courses['insert_timestamp'] = datetime.now()
     courses = courses[['load_id'] + columns + ['insert_timestamp']]
     logger.info(f'BANNER_COURSES: Prepared {courses.shape[0]} rows for load to SQL Server.')
@@ -162,7 +209,7 @@ def extract_and_load_banner_courses():
 
 # COURSELEAF ETL FUNCTIONS
 
-def extract_and_load_courseleaf_courses():
+def extract_and_load_courseleaf_courses(load_id):
     """
     """
     extract_query = QUERIES['courseleaf']['select']['courses']
@@ -176,7 +223,7 @@ def extract_and_load_courseleaf_courses():
     logger.info(f'COURSELEAF_COURSES: Read {courses.shape[0]} rows from SQLite database.')
 
     courses.fillna('', inplace = True)
-    courses['load_id'] = get_next_load_id('courseleaf')
+    courses['load_id'] = load_id
     courses['insert_timestamp'] = datetime.now()
     courses = courses[['load_id'] + columns + ['insert_timestamp']]
     logger.info(f'COURSELEAF_COURSES: Prepared {courses.shape[0]} rows for load to SQL Server.')
@@ -189,7 +236,7 @@ def extract_and_load_courseleaf_courses():
     except Exception as e:
         logger.error(f'COURSELEAF_COURSES: {str(e)}')
 
-def extract_and_load_courseleaf_departments():
+def extract_and_load_courseleaf_departments(load_id):
     """
     """
     extract_query = QUERIES['courseleaf']['select']['departments']
@@ -202,7 +249,7 @@ def extract_and_load_courseleaf_departments():
     logger.info(f'COURSELEAF_DEPARTMENTS: Read {departments.shape[0]} rows from SQLite database.')
 
     departments.fillna('', inplace = True)
-    departments['load_id'] = get_next_load_id('courseleaf')
+    departments['load_id'] = load_id
     departments['insert_timestamp'] = datetime.now()
     departments = departments[['load_id'] + columns + ['insert_timestamp']]
     logger.info(f'COURSELEAF_DEPARTMENTS: Prepared {departments.shape[0]} rows for load to SQL Server.')
@@ -215,7 +262,7 @@ def extract_and_load_courseleaf_departments():
     except Exception as e:
         logger.error(f'COURSELEAF_DEPARTMENTS: {str(e)}')
 
-def extract_and_load_courseleaf_roles():
+def extract_and_load_courseleaf_roles(load_id):
     """Retrieve role membership data from CourseLeaf database file, transform results, and load to SQL Server.
 
     Because I'm using a query provided by Leepfrog to get the role membership information (because it's structured
@@ -264,7 +311,7 @@ def extract_and_load_courseleaf_roles():
     # as the index since that's now the primary key value in our dataset.
     roles = roles.join(members)
     roles.reset_index(inplace = True)
-    roles['load_id'] = get_next_load_id('courseleaf')
+    roles['load_id'] = load_id
     roles['insert_timestamp'] = datetime.now()
     roles = roles[['load_id', 'role', 'dept_no', 'dept', 'role_title', 'uin', 'insert_timestamp']]
     logger.info(f'COURSELEAF_ROLES: Prepared {roles.shape[0]} rows for load to SQL Server.')
@@ -279,7 +326,7 @@ def extract_and_load_courseleaf_roles():
     except Exception as e:
         logger.error(str(e))
 
-def extract_and_load_courseleaf_subjects():
+def extract_and_load_courseleaf_subjects(load_id):
     """
     """
     extract_query = QUERIES['courseleaf']['select']['subjects']
@@ -292,7 +339,7 @@ def extract_and_load_courseleaf_subjects():
     logger.info(f'COURSELEAF_SUBJECTS: Read {subjects.shape[0]} rows from SQLite database.')
 
     subjects.fillna('', inplace = True)
-    subjects['load_id'] = get_next_load_id('courseleaf')
+    subjects['load_id'] = load_id
     subjects['insert_timestamp'] = datetime.now()
     subjects = subjects[['load_id'] + columns + ['insert_timestamp']]
     logger.info(f'COURSELEAF_SUBJECTS: Prepared {subjects.shape[0]} rows for load to SQL Server.')
@@ -305,7 +352,7 @@ def extract_and_load_courseleaf_subjects():
     except Exception as e:
         logger.error(f'COURSELEAF_SUBJECTS: {str(e)}')
 
-def extract_and_load_courseleaf_users():
+def extract_and_load_courseleaf_users(load_id):
     """
     """
     extract_query = QUERIES['courseleaf']['select']['users']
@@ -318,7 +365,7 @@ def extract_and_load_courseleaf_users():
     logger.info(f'COURSELEAF_USERS: Read {users.shape[0]} rows from SQLite database.')
 
     users.fillna('', inplace = True)
-    users['load_id'] = get_next_load_id('courseleaf')
+    users['load_id'] = load_id
     users['insert_timestamp'] = datetime.now()
     users = users[['load_id'] + columns + ['insert_timestamp']]
     logger.info(f'COURSELEAF_USERS: Prepared {users.shape[0]} rows for load to SQL Server.')
@@ -334,62 +381,90 @@ def extract_and_load_courseleaf_users():
 # POWERBI ETL FUNCTIONS
 
 # Putting this here in case I decide that I need to build more specialized presentation tables for PowerBI
+# I kinda already have some, I might need more, I might figure something else out, idk
 
 # AGGREGATE FUNCTIONS
 
 def execute_banner_data_load():
     """Same thing as below but for the Banner stuff we care about.
     """
-    extract_and_load_banner_courses()
+    banner_load_id = insert_new_import_record('banner')
+
+    extract_and_load_banner_courses(banner_load_id)
 
     # Manually call SP to update crosslists table after course load is done:
     sp_query = QUERIES['reg']['stored_procedures']['update_current_crosslists']
-    query_functions.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, sp_query)
+    qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, sp_query)
 
 def execute_courseleaf_data_load():
     """This just runs all of the other CourseLeaf ETL functions. Is this modularity?
     """
-    extract_and_load_courseleaf_courses()
-    extract_and_load_courseleaf_departments()
-    extract_and_load_courseleaf_roles()
-    extract_and_load_courseleaf_subjects()
-    extract_and_load_courseleaf_users()
+    courseleaf_load_id = insert_new_import_record('courseleaf')
+
+    extract_and_load_courseleaf_courses(courseleaf_load_id)
+    extract_and_load_courseleaf_departments(courseleaf_load_id)
+    extract_and_load_courseleaf_roles(courseleaf_load_id)
+    extract_and_load_courseleaf_subjects(courseleaf_load_id)
+    extract_and_load_courseleaf_users(courseleaf_load_id)
 
     # Manually call SP to end old roles where called for:
     sp_query = QUERIES['reg']['stored_procedures']['deactivate_old_roles']
-    query_functions.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, sp_query)
+    qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, sp_query)
 
 def truncate_database_tables():
     """Truncates all application database tables. Only to be used when resetting database for testing purposes.
     Probably dangerous to leave laying around, but whatever.
     """
+    # TODO while this might be deleted in a later version of the app, when things are working
+    # and there's no reasonable justification for needing to erase all of the data in the 
+    # database, I am also tempted to develop a better method for executing all of these 
+    # truncates than having an individual query file saved for every single table that needs
+    # to be touched. However, that's more of an intellectual exercise and not something I want
+    # to pursue right now, hence this overly-wordy comment.
+
     # Banner
-    for table in ['courses', 'departments', 'subjects', 'userinfo']:
+    for table in ['courses', 'departments', 'imports', 'subjects', 'userinfo']:
         truncate_query = QUERIES['reg']['truncate']['banner'][table]
-        query_functions.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
+        qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
     # Courseleaf
-    for table in ['courses', 'departments', 'roles', 'subjects', 'users']:
+    for table in ['courses', 'departments', 'imports', 'roles', 'subjects', 'users']:
         truncate_query = QUERIES['reg']['truncate']['courseleaf'][table]
-        query_functions.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
+        qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
     # Current
     for table in ['courses', 'crosslists', 'departments', 'roles', 'subjects', 'users']:
         truncate_query = QUERIES['reg']['truncate']['current'][table]
-        query_functions.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
+        qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
 
 ######################################################################################################
 # CODE EXECUTION
 ######################################################################################################
 
 def main():
-    query_functions.generate_query_yaml('queries', 'test.yaml')
+    logger.info('COURSELEAF_CONTACTS: Initializing data load.')
+    # Always generate new query yaml first to capture any changes made to queries between loads
+    qf.generate_query_yaml('queries', 'test.yaml')
+
     # This will truncate all app database tables before proceeding with data load.
     # For testing only!!! Remove this before running in production.
     truncate_database_tables()
+
+    # Bring in SQLite file from LeepFrog and confirm that it's accessible
     import_complete = import_database_file()
+
+    # All of the ETL stuff happens here
     if import_complete:
         execute_banner_data_load()
         execute_courseleaf_data_load()
-    logger.info('COURSELEAF_CONTACTS: Data load complete.')
+
+        # This is a stopgap until I figure out a better way to store the data for presentation in 
+        # Power BI. TODO delete this after I've figured that part out.
+        sp_query = QUERIES['reg']['stored_procedures']['generate_powerbi_crosslists']
+        qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, sp_query)
+
+        logger.info('COURSELEAF_CONTACTS: Data load complete.')
+    else:
+        logger.error('COURSELEAF_CONTACTS: The CourseLeaf database file was not found. Aborting data load.')
+    
 
 if __name__ == "__main__":
     main()

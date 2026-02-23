@@ -93,6 +93,7 @@ def parameterize_data_frame(df: pd.DataFrame):
 # (parameterize_data_frame(), above) since all of the data in this project will be passed through
 # a DataFrame at some point, but more caution will need to be used when passing parameters in more
 # generic use cases in the future.
+
 def insert_to_sql_server(server, user, password, query, parameters = None):
     connection_string = f'DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={server};UID={user};PWD={password};TrustServerCertificate=yes;'
     try:
