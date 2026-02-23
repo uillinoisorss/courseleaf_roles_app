@@ -5,20 +5,32 @@ import re
 import pyodbc
 import yaml
 
-# Maybe I can rename this file to query_functions?
-
 # Run a SQL Server query without returning anything.
 # Primarily intended for running truncate queries and the like.
 def run_sql_server_query(server, user, password, query, parameters = None):
+    """Execute a query against a SQL Server instance without returning any data. 
+    Optionally takes a list of parameters to be passed to the query. Primarily intended
+    for use with DDL and DML queries.
+
+    Args:
+        server (str): SQL server instance connection string.
+        user (str): username for SQL Server login.
+        password (str): password for SQL Server login.
+        query (str): query to be run against the SQL server instance.
+        parameters (list(str), default None): list of parameters to be passed alongside the query. If not provided,
+            then the query is exectuted as though it has no parameters, which can cause problems if the query
+            actually does take parameters.
+    """
     connection_string = f'DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={server};UID={user};PWD={password};TrustServerCertificate=yes;'
     try:
         with pyodbc.connect(connection_string, trusted_connection = 'Yes') as connection:
             with connection.cursor() as cursor:
                 if parameters:
                     cursor.execute(query, parameters)
+                    logging.info(f'Executed query: {query} with parameters {parameters}')
                 else:
                     cursor.execute(query)
-                logging.info(f'Executed query: {query} with parameters {parameters}')
+                    logging.info(f'Execute query: {query}')
     except Exception as e:
         logging.error(f'An exception was raised while connecting to SQL Server {server}: {str(e)}')
         raise
@@ -26,10 +38,26 @@ def run_sql_server_query(server, user, password, query, parameters = None):
 # Functions for creating SQL query YAML file
 
 def strip_query(path, drop_semicolon = False, param_prefix = None):
+    """Prepares the contents of a .sql file to be inserted into a YAML file by removing contents and 
+    replacing all whitespace with a single space, collapsing the query to a single line.
+    Has optional parameters for configuring the final SQL string format.
+
+    Args:
+        path (path): path to the .sql file to read from.
+        drop_semicolon (bool, default False): whether to remove semicolons from the end of the SQL string.
+        param_prefix (str, default None): character that will be used to prefix query parameters, replacing
+            any existing parameter prefix from a pre-defined list (right now just &). If no value is 
+            supplied, then no prefix substitution takes place.
+
+    Returns:
+        str: the processed query string.
     """
-    """
-    with open(path) as file:
-        lines = file.readlines()
+    try:
+        with open(path) as file:
+            lines = file.readlines()
+    except Exception as e:
+        logging.error(f'An exception was raised while attempting to access the directory {path}: {str(e)}')
+        raise
     lines = [re.sub(r'--+.*', '', line) for line in lines]
     query = ''.join(lines)
     if drop_semicolon:
@@ -57,12 +85,21 @@ def get_paths(parent):
     return paths
 
 def make_dict_from_paths(paths):
-    """Convert a list of file paths into a nested dictionary.
+    """Convert a list of file paths into a nested dictionary of query strings.
     Code adapted from this SO post by user DarrylG: https://stackoverflow.com/a/66995788
 
     Note: this will include the shared highest level directory, which is undesirable for
     its use in this application. 
+
+    Args:
+        paths(list(path)): a list of pathlike objects.
+
+    Returns
+        dict(str : str): a dictionary associating file paths to their content.
     """
+    # TODO rewrite this method to be more generic or add more type checking and exceptions to make 
+    # sure that it doesn't crash if a none-sql file gets in there somehow.
+
     # Sort so deepest paths are first
     paths = sorted(paths, key = lambda s: len(s.lstrip('\\').split('\\')), reverse = True)
 
@@ -103,6 +140,17 @@ def make_dict_from_paths(paths):
     return tree_path
 
 def generate_query_yaml(query_dir, yaml_filename):
+    """Generates a .yaml file from a directory (and its subdirectories) of SQL Queries. 
+    Provides structured access to query contents in code without having to constantly open
+    new file streams. 
+
+    Args:
+        query_dir (path): path to top-level directory containing .sql files.
+        yaml_filename (path): path including filename where .yaml output should be written to.
+    """
+    # TODO make yaml_filename optional and have the method return the dict as an object
+    # when yaml_filename is not passed, similar to how yaml.dump already works.
+
     paths = get_paths(query_dir)
     # Specify the 'queries' key to unwrap the highest level directory
     dict = make_dict_from_paths(paths)['queries']
@@ -111,3 +159,5 @@ def generate_query_yaml(query_dir, yaml_filename):
         del dict['database']
     with open(yaml_filename, 'w') as stream:
         yaml.dump(dict, stream, width = float('inf')) # width = float('inf') ensures that whole queries get dumped to a single line
+        head, tail = os.path.split(yaml_filename)
+        logging.info(f'Query file {tail} has been written to {head}')
