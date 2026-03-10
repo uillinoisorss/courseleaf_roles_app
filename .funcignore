@@ -10,3 +10,4 @@ test
 local_data_load.py
 todo.txt
 *.code-workspace
+*.sqlite
