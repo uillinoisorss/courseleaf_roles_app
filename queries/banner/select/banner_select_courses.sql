@@ -109,6 +109,7 @@ WHERE
 banner_courses AS
 (
 SELECT
+	&TERM AS term,
 	Course AS course,
 	Subject AS subject_code,
 	CourseNumber AS course_no,

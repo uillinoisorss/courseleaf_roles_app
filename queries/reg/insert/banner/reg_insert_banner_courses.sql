@@ -2,6 +2,7 @@ INSERT INTO
     [CourseLeaf_Contacts].[dbo].[banner_courses]
     (
         load_id,
+        term,
         course,
         subject_code,
         course_no,
@@ -18,6 +19,7 @@ INSERT INTO
     )
 VALUES
     (
+        ?,
         ?,
         ?,
         ?,

@@ -1,5 +1,6 @@
 """Complete process for loading CourseLeaf application data to SQL Server database without Azure.
 """
+from collections import namedtuple
 from datetime import datetime
 import io
 import logging
@@ -49,6 +50,11 @@ logging.basicConfig(filename = 'dev.log', encoding = 'utf-8', level = logging.DE
 ######################################################################################################
 # SQL QUERIES 
 ######################################################################################################
+
+# TODO because the QUERIES variable gets loaded from the file before the code has a chance to generate
+# a new file, the first run after updating a query will always have problems. Should probably wrap
+# all of this stuff in a function and call it at the start of main. Might be double work but should
+# have low overhead and makes certain that the newest queries are always being used.
 
 QUERY_FILE_PATH = 'test.yaml'
 # QUERY_FILE_PATH = 'queries.yaml'
@@ -164,8 +170,6 @@ def insert_new_import_record(table_group):
         insert_query = QUERIES['reg']['insert'][table_group]['imports']
         load_timestamp = datetime.now()
         params = etl.parameterize_data_frame(pd.DataFrame(data = {'load_timestamp' : [datetime.now()]}))
-        # params = (load_timestamp, )
-        # print(params)
         etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, insert_query, parameters = params)
         # Get the new load_id to pass to the remaining functions
         load_id = get_load_id(table_group)
@@ -176,36 +180,71 @@ def insert_new_import_record(table_group):
         return -1
 
     return load_id
+
+def get_current_terms():
+    """Retrieves codes for the current term, previous term, next term, and next next term from the ORMaintenance database.
+    """
+    # Create a namedtuple blueprint
+    Terms = namedtuple('Terms', ['current', 'previous', 'next', 'next_next'])
+    extract_query = QUERIES['reg']['select']['terms']['current']
+    terms = etl.extract_from_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, extract_query)
+    # Query results are a tuple wrapped in a list, so need to access the tuple from the list first.
+    # Then the values are constructed into a namedtuple to allow keyword access.
+    return Terms._make(terms[0]) 
     
 # BANNER ETL FUNCTIONS
     
 def extract_and_load_banner_courses(load_id):
     """
     """
-    extract_query = QUERIES['banner']['select']['courses']
-    try:
-        # This query takes a term parameter...
-        # TODO automatically populate this from the OR_Maintenance terms table (and also the next 2 terms, per discussion w/ Rod)
-        extract_results = etl.extract_from_oracle(REPTPROD_HOSTNAME, REPTPROD_USERNAME, REPTPROD_PASSWORD, extract_query, parameters = ['120261'])
-    except Exception as e:
-        logger.error(f'BANNER_COURSES: {str(e)}')
-    columns = ['course', 'subject_code', 'course_no', 'course_title', 'college', 'dept_no', 'control_code', 'course_id', 'course_start_term', 'course_end_term', 'course_effective_term', 'status']
-    courses = etl.query_results_to_dataframe(extract_results, columns)
-    logger.info(f'BANNER_COURSES: Read {courses.shape[0]} rows from REPTPROD.')
-
-    courses.fillna('', inplace = True)
-    courses['load_id'] = load_id
-    courses['insert_timestamp'] = datetime.now()
-    courses = courses[['load_id'] + columns + ['insert_timestamp']]
-    logger.info(f'BANNER_COURSES: Prepared {courses.shape[0]} rows for load to SQL Server.')
-
+    terms = get_current_terms()
+    course_query = QUERIES['banner']['select']['courses']
     load_query = QUERIES['reg']['insert']['banner']['courses']
-    load_data = etl.parameterize_data_frame(courses)
+    for term in terms:
+        try:
+            courses = etl.extract_from_oracle(REPTPROD_HOSTNAME, REPTPROD_USERNAME, REPTPROD_PASSWORD, course_query, parameters = [term])
+        except Exception as e:
+            logger.error(f'BANNER_COURSES: {str(e)}')
+        columns = ['term', 'course', 'subject_code', 'course_no', 'course_title', 'college', 'dept_no', 'control_code', 'course_id', 'course_start_term', 'course_end_term', 'course_effective_term', 'status']
+        courses = etl.query_results_to_dataframe(courses, columns)
+        logger.info(f'BANNER_COURSES: Read {courses.shape[0]} rows from REPTPROD for term {term}.')
+
+        courses.fillna('', inplace = True)
+        courses['load_id'] = load_id
+        courses['insert_timestamp'] = datetime.now()
+        courses = courses[['load_id'] + columns + ['insert_timestamp']]
+        logger.info(f'BANNER_COURSES: Prepared {courses.shape[0]} rows for term {term} for load to SQL Server.')
+
+        load_data = etl.parameterize_data_frame(courses)
+        try:
+            etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
+            logger.info(f'BANNER_COURSES: Load to SQL Server for term {term} complete.')
+        except Exception as e:
+            logger.error(f'BANNER_COURSES: {str(e)}')
+
+def extract_and_load_banner_terms(load_id):
+    extract_query = QUERIES['banner']['select']['terms']
+    try:
+        terms = etl.extract_from_oracle(REPTPROD_HOSTNAME, REPTPROD_USERNAME, REPTPROD_PASSWORD, extract_query)
+    except Exception as e:
+        logger.error(f'BANNER_TERMS: {str(e)}')
+    columns = ['term_code', 'term_name_full', 'term_name', 'term_start_date', 'term_end_date']
+    terms = etl.query_results_to_dataframe(terms, columns)
+    logger.info(f'BANNER_TERMS: Read {terms.shape[0]} rows from REPTPROD.')
+
+    terms.fillna('', inplace = True)
+    terms['load_id'] = load_id
+    terms['insert_timestamp'] = datetime.now()
+    terms = terms[['load_id'] + columns + ['insert_timestamp']]
+    logger.info(f'BANNER_TERMS: Prepared {terms.shape[0]} rows for load to SQL Server.')
+
+    load_query = QUERIES['reg']['insert']['banner']['terms']
+    load_data = etl.parameterize_data_frame(terms)
     try:
         etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
-        logger.info(f'BANNER_COURSES: Load to SQL Server complete.')
+        logger.info(f'BANNER_TERMS: Load to SQL Server complete.')
     except Exception as e:
-        logger.error(f'BANNER_COURSES: {str(e)}')
+        logger.error(f'BANNER_TERMS: {str(e)}')
 
 # COURSELEAF ETL FUNCTIONS
 
@@ -391,6 +430,7 @@ def execute_banner_data_load():
     banner_load_id = insert_new_import_record('banner')
 
     extract_and_load_banner_courses(banner_load_id)
+    extract_and_load_banner_terms(banner_load_id)
 
     # Manually call SP to update crosslists table after course load is done:
     sp_query = QUERIES['reg']['stored_procedures']['update_current_crosslists']
@@ -455,16 +495,16 @@ def main():
     if import_complete:
         execute_banner_data_load()
         execute_courseleaf_data_load()
-
-        # This is a stopgap until I figure out a better way to store the data for presentation in 
-        # Power BI. TODO delete this after I've figured that part out.
-        sp_query = QUERIES['reg']['stored_procedures']['generate_powerbi_crosslists']
-        qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, sp_query)
-
         logger.info('COURSELEAF_CONTACTS: Data load complete.')
     else:
         logger.error('COURSELEAF_CONTACTS: The CourseLeaf database file was not found. Aborting data load.')
     
+def test():
+    qf.generate_query_yaml('queries', 'test.yaml')
+    # truncate_database_tables()
+    extract_and_load_banner_terms(1)
+    
 
 if __name__ == "__main__":
-    main()
+    # main()
+    test()

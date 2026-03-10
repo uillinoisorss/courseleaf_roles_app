@@ -17,6 +17,7 @@ GO
 CREATE TABLE [banner_courses] (
   [id] int PRIMARY KEY IDENTITY(1, 1),
   [load_id] int,
+  [term] nvarchar(6),
   [course] nvarchar(50),
   [subject_code] nvarchar(50),
   [course_no] nvarchar(3),
@@ -69,12 +70,17 @@ CREATE TABLE [banner_subjects] (
 )
 GO
 
+DROP TABLE IF EXISTS [banner_terms];
+GO
+
 CREATE TABLE [banner_terms] (
   [id] int PRIMARY KEY IDENTITY(1, 1),
   [load_id] int,
   [term_code] nvarchar(6),
   [term_name_full] nvarchar(255),
   [term_name] nvarchar(50),
+  [term_start_date] datetime2(7),
+  [term_end_date] datetime2(7),
   [insert_timestamp] datetime2(7)
 )
 GO
@@ -181,6 +187,7 @@ GO
 
 CREATE TABLE [current_courses] (
   [id] int PRIMARY KEY IDENTITY(1, 1),
+  [term] nvarchar(6),
   [course] nvarchar(50),
   [subject_code] nvarchar(50),
   [course_no] nvarchar(3),
@@ -206,6 +213,8 @@ CREATE TABLE [current_crosslists] (
   [crosslist_effective_term] nvarchar(6),
   [course] nvarchar(50),
   [controlling_course] nvarchar(50),
+  [is_crosslisted] nvarchar(1),
+  [is_controlling] nvarchar(1),
   [insert_timestamp] datetime2(7),
   [modified_timestamp] datetime2(7)
 )
@@ -253,6 +262,20 @@ CREATE TABLE [current_subjects] (
 )
 GO
 
+DROP TABLE IF EXISTS [current_terms];
+GO
+
+CREATE TABLE [current_terms] (
+  [term_code] nvarchar(6) PRIMARY KEY,
+  [term_name_full] nvarchar(255),
+  [term_name] nvarchar(255),
+  [term_start_date] datetime2(7),
+  [term_end_date] datetime2(7),
+  [insert_timestamp] datetime2(7),
+  [modified_timestamp] datetime2(7)
+)
+GO
+
 DROP TABLE IF EXISTS [current_users];
 GO
 
@@ -267,6 +290,7 @@ CREATE TABLE [current_users] (
 GO
 
 -- Create PowerBI tables
+-- This table is probably not going to be used for anything so delete it later.
 
 DROP TABLE IF EXISTS [powerbi_crosslists];
 GO
@@ -278,6 +302,20 @@ CREATE TABLE [powerbi_crosslists] (
   [courses_in_group] nvarchar(50),
   [is_controlling] nvarchar(1)
 )
+
+-- Create OR Tables
+
+DROP TABLE IF EXISTS [ormaintenance_terms];
+GO
+
+CREATE TABLE [ormaintenance_terms] (
+  [current_term] nvarchar(6) PRIMARY KEY,
+  [previous_term] nvarchar(6),
+  [next_term] nvarchar(6),
+  [next_next_term] nvarchar(6),
+  [insert_timestamp] datetime2(7)
+)
+GO
 
 ---------------------------------------------------------------------------------------------------
 -- STORED PROCEDURES
@@ -407,6 +445,113 @@ BEGIN
 END
 GO
 
+-- Crosslists
+
+DROP PROCEDURE IF EXISTS [dbo].[update_current_crosslists];
+GO
+
+CREATE PROCEDURE [dbo].[update_current_crosslists]
+AS
+BEGIN
+	SET NOCOUNT ON
+	-- Creates crosslist correspondence table: 'course' is the course that gets looked up,
+	-- 'controlling_course' is the course that controls the course that gets looked up.
+
+	TRUNCATE TABLE [dbo].[current_crosslists];
+
+	DECLARE @DATE DATETIME2(7);
+	SET @DATE = GETDATE();
+
+	INSERT INTO [dbo].[current_crosslists] (
+		crosslist_effective_term,
+		course,
+		controlling_course,
+		is_crosslisted,
+		is_controlling,
+		insert_timestamp
+	)
+	-- Crosslisted courses that are non-controlling get listed alongside their controlling course here
+	SELECT
+		non_controlling.term AS crosslist_effective_term,
+		non_controlling.course AS course,
+		controlling.course AS controlling_course,
+		'Y' AS is_crosslisted,
+		'N' AS is_controlling,
+		@DATE AS insert_timestamp
+	FROM
+		current_courses non_controlling
+		LEFT OUTER JOIN current_courses controlling on (
+			non_controlling.course_id = controlling.course_id
+			AND non_controlling.term = controlling.term
+		)
+	WHERE
+		non_controlling.control_code = 'N'
+		AND controlling.control_code = 'C'
+	UNION
+	-- Crosslisted courses that are controlling get listed as their own controlling course
+	SELECT
+		controlling.term AS crosslist_effective_term,
+		controlling.course AS course,
+		controlling.course AS controlling_course,
+		'Y' AS is_crosslisted,
+		'Y' AS is_controlling,
+		@DATE AS insert_timestamp
+	FROM
+		current_courses controlling
+	WHERE
+		controlling.control_code = 'C'
+	UNION
+	 -- Courses that are not crosslisted also get listed as their own controlling course
+	SELECT
+		current_courses.term AS crosslist_effective_term,
+		current_courses.course AS course,
+		current_courses.course AS controlling_course,
+		'N' AS is_crosslisted,
+		'Y' AS is_controlling,
+		@DATE AS insert_timestamp
+	FROM
+		current_courses
+	WHERE
+		current_courses.control_code = ''
+	;
+END
+GO
+
+DROP PROCEDURE IF EXISTS [dbo].[update_ormaintenance_terms];
+GO
+
+CREATE PROCEDURE [dbo].[update_ormaintenance_terms]
+AS
+BEGIN
+	SET NOCOUNT ON
+
+	DECLARE @DATE DATETIME2(7);
+	SET @DATE = GETDATE();
+
+	TRUNCATE TABLE [dbo].[ormaintenance_terms];
+
+	INSERT INTO [dbo].[ormaintenance_terms] (
+		current_term,
+		previous_term,
+		next_term,
+		next_next_term,
+		insert_timestamp
+	)
+	SELECT
+		Term AS current_term,
+		PrevTerm AS previous_term,
+		NextTerm AS next_term,
+		Next2Term AS next_next_term,
+		@DATE AS insert_timestamp
+	FROM
+		[ORMaintenance].[dbo].[TblTerms]
+	WHERE
+		CURRENT_TERM = 'X'
+	;
+
+END
+GO
+
 ---------------------------------------------------------------------------------------------------
 -- TRIGGERS
 ---------------------------------------------------------------------------------------------------
@@ -429,6 +574,7 @@ BEGIN
 
 	IF EXISTS (
 		SELECT
+			inserted.term,
 			inserted.course,
 			inserted.course_id,
 			inserted.course_effective_term
@@ -437,13 +583,15 @@ BEGIN
 		WHERE
 			NOT EXISTS (
 				SELECT
+					current_courses.term,
 					current_courses.course,
 					current_courses.course_id,
 					current_courses.course_effective_term
 				FROM
 					current_courses
 				WHERE
-					current_courses.course = inserted.course
+					current_courses.term = inserted.term
+					AND current_courses.course = inserted.course
 					AND current_courses.course_id = inserted.course_id
 					AND current_courses.course_effective_term = inserted.course_effective_term
 			)
@@ -451,6 +599,7 @@ BEGIN
 	BEGIN
 		INSERT INTO
 			[dbo].[current_courses] (
+				term,
 				course,
 				subject_code,
 				course_no,
@@ -467,6 +616,7 @@ BEGIN
 				modified_timestamp
 			)
 		SELECT
+			inserted.term,
 			inserted.course,
 			inserted.subject_code,
 			inserted.course_no,
@@ -486,76 +636,19 @@ BEGIN
 		WHERE
 			NOT EXISTS (
 				SELECT
+					current_courses.term,
 					current_courses.course,
 					current_courses.course_id,
 					current_courses.course_effective_term
 				FROM
 					current_courses
 				WHERE
-					current_courses.course = inserted.course
+					current_courses.term = inserted.term
+					AND current_courses.course = inserted.course
 					AND current_courses.course_id = inserted.course_id
 					AND current_courses.course_effective_term = inserted.course_effective_term
 			)
 	END
-END
-GO
-
--- Crosslists
-
-CREATE TRIGGER [dbo].[update_current_crosslists]
-ON [dbo].[current_courses]
-AFTER INSERT
-NOT FOR REPLICATION
-AS
-BEGIN
-	SET NOCOUNT ON
-	-- Creates crosslist correspondence table: 'course' is the course that gets looked up,
-	-- 'conrolling_course' is the course that controls the course that gets looked up.
-
-	DECLARE @DATE DATETIME2(7);
-	SET @DATE = GETDATE();
-
-	INSERT INTO [dbo].[current_crosslists] (
-		crosslist_effective_term,
-		course,
-		controlling_course,
-		insert_timestamp
-	)
-	-- Crosslisted courses that are non-controlling get listed alongside their controlling course here
-	SELECT
-		non_controlling.course_effective_term AS crosslist_effective_term,
-		non_controlling.course AS course,
-		controlling.course AS controlling_course,
-		@DATE AS insert_timestamp
-	FROM
-		current_courses non_controlling
-		LEFT OUTER JOIN current_courses controlling on (non_controlling.course_id = controlling.course_id)
-	WHERE
-		non_controlling.control_code = 'N'
-		AND controlling.control_code = 'C'
-	UNION
-	-- Crosslisted courses that are controlling get listed as their own controlling course
-	SELECT
-		controlling.course_effective_term AS crosslist_effective_term,
-		controlling.course AS course,
-		controlling.course AS controlling_course,
-		@DATE AS insert_timestamp
-	FROM
-		current_courses controlling
-	WHERE
-		controlling.control_code = 'C'
-	UNION
-	-- Courses that are not crosslisted also get listed as their own controlling course
-	SELECT
-		current_courses.course_effective_term AS crosslist_effective_term,
-		current_courses.course AS course,
-		current_courses.course AS controlling_course,
-		@DATE AS insert_timestamp
-	FROM
-		current_courses
-	WHERE
-		current_courses.control_code IS NULL
-	;
 END
 GO
 
@@ -694,6 +787,53 @@ BEGIN
 		@DATE
 	FROM
 		inserted
+	;
+END
+GO
+
+-- Terms
+
+DROP TRIGGER IF EXISTS [dbo].[update_current_terms];
+GO
+
+CREATE TRIGGER [dbo].[update_current_terms]
+ON [dbo].[banner_terms]
+AFTER INSERT
+NOT FOR REPLICATION
+AS
+BEGIN
+	SET NOCOUNT ON;
+
+	DECLARE @DATE DATETIME2(7);
+	SET @DATE = GETDATE();
+
+	INSERT INTO
+		[dbo].[current_terms] (
+			term_code,
+			term_name_full,
+			term_name,
+			term_start_date,
+			term_end_date,
+			insert_timestamp
+		)
+	SELECT
+		inserted.term_code,
+		inserted.term_name_full,
+		inserted.term_name,
+		inserted.term_start_date,
+		inserted.term_end_date,
+		@DATE
+	FROM
+		inserted
+	WHERE
+		NOT EXISTS (
+			SELECT
+				term_code
+			FROM
+				current_terms
+			WHERE
+				current_terms.term_code = inserted.term_code
+	)
 	;
 END
 GO

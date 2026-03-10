@@ -5,10 +5,14 @@ INSERT INTO
         term_code,
         term_name_full,
         term_name,
+        term_start_date,
+        term_end_date,
         insert_timestamp
     )
 VALUES
     (
+        ?,
+        ?,
         ?,
         ?,
         ?,

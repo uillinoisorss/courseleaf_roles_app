@@ -20,8 +20,10 @@ def extract_from_sql_server(server, user, password, query, parameters = None):
             with connection.cursor() as cursor:
                 if parameters:
                     cursor.execute(query, parameters)
+                    logging.info(f'Executed query: {query} with parameters {parameters}')
                 else:
                     cursor.execute(query)
+                    logging.info(f'Executed query: {query}')
                 return_data = cursor.fetchall()
     except Exception as e:
         logging.error(f'An exception was raised while connecting to SQL Server {server}: {str(e)}')
@@ -40,8 +42,10 @@ def extract_from_oracle(dsn, user, password, query, parameters = None):
             with connection.cursor() as cursor:
                 if parameters:
                     cursor.execute(query, parameters)
+                    logging.info(f'Executed query: {query} with parameters {parameters}')
                 else:
                     cursor.execute(query)
+                    logging.info(f'Executed query: {query}')
                 return_data = cursor.fetchall()
     except Exception as e:
         logging.error(f'An exception was raised while connecting to Oracle DB {dsn}: {str(e)}')
