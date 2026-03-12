@@ -1,1 +1,0 @@
-TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[courseleaf_departments] ;

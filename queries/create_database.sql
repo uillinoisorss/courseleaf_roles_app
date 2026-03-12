@@ -42,8 +42,6 @@ CREATE TABLE [banner_departments] (
   [load_id] int,
   [dept_no] nvarchar(4),
   [dept_name] nvarchar(255),
-  [college] nvarchar(2),
-  [college_name] nvarchar(255),
   [insert_timestamp] datetime2(7)
 )
 GO
@@ -65,7 +63,7 @@ CREATE TABLE [banner_subjects] (
   [load_id] int,
   [subject_code] nvarchar(50),
   [subject] nvarchar(50),
-  [dept_no] nvarchar(4),
+  [subject_name_codebook] nvarchar(255),
   [insert_timestamp] datetime2(7)
 )
 GO
@@ -101,34 +99,6 @@ GO
 
 -- Create CourseLeaf tables
 
-DROP TABLE IF EXISTS [courseleaf_courses];
-GO
-
-CREATE TABLE [courseleaf_courses] (
-  [id] int PRIMARY KEY IDENTITY(1, 1),
-  [load_id] int NOT NULL,
-  [course] nvarchar(50) NOT NULL,
-  [subject_code] nvarchar(10) NOT NULL,
-  [course_no] nvarchar(3) NOT NULL,
-  [course_title] nvarchar(255),
-  [insert_timestamp] datetime2(7)
-)
-GO
-
-DROP TABLE IF EXISTS [courseleaf_departments];
-GO
-
-CREATE TABLE [courseleaf_departments] (
-  [id] int PRIMARY KEY IDENTITY(1, 1),
-  [load_id] int,
-  [dept_no] nvarchar(4),
-  [dept_name] nvarchar(255),
-  [college] nvarchar(2),
-  [college_name] nvarchar(255),
-  [insert_timestamp] datetime2(7)
-)
-GO
-
 DROP TABLE IF EXISTS [courseleaf_imports];
 GO
 
@@ -149,19 +119,6 @@ CREATE TABLE [courseleaf_roles] (
   [dept] nvarchar(50),
   [role_title] nvarchar(50),
   [uin] nvarchar(9),
-  [insert_timestamp] datetime2(7)
-)
-GO
-
-DROP TABLE IF EXISTS [courseleaf_subjects];
-GO
-
-CREATE TABLE [courseleaf_subjects] (
-  [id] int PRIMARY KEY IDENTITY(1, 1),
-  [load_id] int,
-  [subject_code] nvarchar(50),
-  [subject] nvarchar(50),
-  [dept_no] nvarchar(4),
   [insert_timestamp] datetime2(7)
 )
 GO
@@ -213,6 +170,7 @@ CREATE TABLE [current_crosslists] (
   [crosslist_effective_term] nvarchar(6),
   [course] nvarchar(50),
   [controlling_course] nvarchar(50),
+  [controlling_dept_no] nvarchar(4),
   [is_crosslisted] nvarchar(1),
   [is_controlling] nvarchar(1),
   [insert_timestamp] datetime2(7),
@@ -226,8 +184,6 @@ GO
 CREATE TABLE [current_departments] (
   [dept_no] nvarchar(4) PRIMARY KEY,
   [dept_name] nvarchar(255),
-  [college] nvarchar(2),
-  [college_name] nvarchar(255),
   [insert_timestamp] datetime2(7),
   [modified_timestamp] datetime2(7)
 )
@@ -256,7 +212,7 @@ GO
 CREATE TABLE [current_subjects] (
   [subject_code] nvarchar(50) PRIMARY KEY,
   [subject] nvarchar(50),
-  [dept_no] nvarchar(4),
+  [subject_name_codebook] nvarchar(255),
   [insert_timestamp] datetime2(7),
   [modified_timestamp] datetime2(7)
 )
@@ -289,20 +245,6 @@ CREATE TABLE [current_users] (
 )
 GO
 
--- Create PowerBI tables
--- This table is probably not going to be used for anything so delete it later.
-
-DROP TABLE IF EXISTS [powerbi_crosslists];
-GO
-
-CREATE TABLE [powerbi_crosslists] (
-  [id] int PRIMARY KEY IDENTITY(1, 1),
-  [selected_course] nvarchar(50),
-  [controlling_course] nvarchar(50),
-  [courses_in_group] nvarchar(50),
-  [is_controlling] nvarchar(1)
-)
-
 -- Create OR Tables
 
 DROP TABLE IF EXISTS [ormaintenance_terms];
@@ -316,6 +258,21 @@ CREATE TABLE [ormaintenance_terms] (
   [insert_timestamp] datetime2(7)
 )
 GO
+
+-- Create PowerBI reference tables
+
+DROP TABLE IF EXISTS [powerbi_crosslists];
+GO
+
+CREATE TABLE [powerbi_crosslists] (
+  [id] int PRIMARY KEY IDENTITY(1, 1),
+  [crosslist_effective_term] nvarchar(6),
+  [selected_course] nvarchar(50),
+  [controlling_course] nvarchar(50),
+  [courses_in_group] nvarchar(50),
+  [is_controlling] nvarchar(1),
+  [is_crosslisted] nvarchar(1)
+)
 
 ---------------------------------------------------------------------------------------------------
 -- STORED PROCEDURES
@@ -466,6 +423,7 @@ BEGIN
 		crosslist_effective_term,
 		course,
 		controlling_course,
+		controlling_dept_no,
 		is_crosslisted,
 		is_controlling,
 		insert_timestamp
@@ -475,6 +433,7 @@ BEGIN
 		non_controlling.term AS crosslist_effective_term,
 		non_controlling.course AS course,
 		controlling.course AS controlling_course,
+		controlling.dept_no AS controlling_dept_no,
 		'Y' AS is_crosslisted,
 		'N' AS is_controlling,
 		@DATE AS insert_timestamp
@@ -493,6 +452,7 @@ BEGIN
 		controlling.term AS crosslist_effective_term,
 		controlling.course AS course,
 		controlling.course AS controlling_course,
+		controlling.dept_no AS controlling_dept_no,
 		'Y' AS is_crosslisted,
 		'Y' AS is_controlling,
 		@DATE AS insert_timestamp
@@ -506,6 +466,7 @@ BEGIN
 		current_courses.term AS crosslist_effective_term,
 		current_courses.course AS course,
 		current_courses.course AS controlling_course,
+		current_courses.dept_no AS controlling_dept_no,
 		'N' AS is_crosslisted,
 		'Y' AS is_controlling,
 		@DATE AS insert_timestamp
@@ -658,7 +619,7 @@ DROP TRIGGER IF EXISTS [dbo].[update_current_departments];
 GO
 
 CREATE TRIGGER [dbo].[update_current_departments]
-ON [dbo].[courseleaf_departments]
+ON [dbo].[banner_departments]
 AFTER INSERT
 NOT FOR REPLICATION
 AS
@@ -669,12 +630,10 @@ BEGIN
 	SET @DATE = GETDATE();
 
 	INSERT INTO
-		[dbo].[current_departments] (dept_no, dept_name, college, college_name, insert_timestamp)
+		[dbo].[current_departments] (dept_no, dept_name, insert_timestamp)
 	SELECT
 		inserted.dept_no,
 		inserted.dept_name,
-		inserted.college,
-		inserted.college_name,
 		inserted.insert_timestamp
 	FROM
 		inserted
@@ -763,7 +722,7 @@ DROP TRIGGER IF EXISTS [dbo].[update_current_subjects];
 GO
 
 CREATE TRIGGER [dbo].[update_current_subjects]
-ON [dbo].[courseleaf_subjects]
+ON [dbo].[banner_subjects]
 AFTER INSERT
 NOT FOR REPLICATION
 AS
@@ -777,13 +736,13 @@ BEGIN
 		[dbo].[current_subjects] (
 			subject_code,
 			subject,
-			dept_no,
+			subject_name_codebook,
 			insert_timestamp
 		)
 	SELECT
 		inserted.subject_code,
 		inserted.subject,
-		inserted.dept_no,
+		inserted.subject_name_codebook,
 		@DATE
 	FROM
 		inserted

@@ -222,6 +222,54 @@ def extract_and_load_banner_courses(load_id):
         except Exception as e:
             logger.error(f'BANNER_COURSES: {str(e)}')
 
+def extract_and_load_banner_departments(load_id):
+    extract_query = QUERIES['banner']['select']['departments']
+    try:
+        departments = etl.extract_from_oracle(REPTPROD_HOSTNAME, REPTPROD_USERNAME, REPTPROD_PASSWORD, extract_query)
+    except Exception as e:
+        logger.error(f'BANNER_DEPARTMENTS: {str(e)}')
+    columns = ['dept_no', 'dept_name']
+    departments = etl.query_results_to_dataframe(departments, columns)
+    logger.info(f'BANNER_DEPARTMENTS: Read {departments.shape[0]} rows from REPTPROD.')
+
+    departments.fillna('', inplace = True)
+    departments['load_id'] = load_id
+    departments['insert_timestamp'] = datetime.now()
+    departments = departments[['load_id'] + columns + ['insert_timestamp']]
+    logger.info(f'BANNER_DEPARTMENTS: Prepared {departments.shape[0]} rows for load to SQL Server.')
+
+    load_query = QUERIES['reg']['insert']['banner']['departments']
+    load_data = etl.parameterize_data_frame(departments)
+    try:
+        etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
+        logger.info(f'BANNER_DEPARTMENTS: Load to SQL Server complete.')
+    except Exception as e:
+        logger.error(f'BANNER_DEPARTMENTS: {str(e)}')
+
+def extract_and_load_banner_subjects(load_id):
+    extract_query = QUERIES['banner']['select']['subjects']
+    try:
+        subjects = etl.extract_from_oracle(REPTPROD_HOSTNAME, REPTPROD_USERNAME, REPTPROD_PASSWORD, extract_query)
+    except Exception as e:
+        logger.error(f'BANNER_SUBJECTS: {str(e)}')
+    columns = ['subject_code', 'subject', 'subject_name_codebook']
+    subjects = etl.query_results_to_dataframe(subjects, columns)
+    logger.info(f'BANNER_SUBJECTS: Read {subjects.shape[0]} rows from REPTPROD.')
+
+    subjects.fillna('', inplace = True)
+    subjects['load_id'] = load_id
+    subjects['insert_timestamp'] = datetime.now()
+    subjects = subjects[['load_id'] + columns + ['insert_timestamp']]
+    logger.info(f'BANNER_SUBJECTS: Prepared {subjects.shape[0]} rows for load to SQL Server.')
+
+    load_query = QUERIES['reg']['insert']['banner']['subjects']
+    load_data = etl.parameterize_data_frame(subjects)
+    try:
+        etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
+        logger.info(f'BANNER_SUBJECTS: Load to SQL Server complete.')
+    except Exception as e:
+        logger.error(f'BANNER_SUBJECTS: {str(e)}')
+
 def extract_and_load_banner_terms(load_id):
     extract_query = QUERIES['banner']['select']['terms']
     try:
@@ -246,60 +294,11 @@ def extract_and_load_banner_terms(load_id):
     except Exception as e:
         logger.error(f'BANNER_TERMS: {str(e)}')
 
+# TODO implement
+def extract_and_load_banner_userinfo(load_id):
+    logger.warning(f'BANNER_USERINFO: This query has not been implemented.')
+
 # COURSELEAF ETL FUNCTIONS
-
-def extract_and_load_courseleaf_courses(load_id):
-    """
-    """
-    extract_query = QUERIES['courseleaf']['select']['courses']
-    try:
-        extract_results = etl.extract_from_sqlite(LOCAL_PATH_TO_DB, extract_query)
-    except Exception as e:
-        logger.error(f'COURSELEAF_COURSES: {str(e)}')
-        raise
-    columns = ['course', 'subject_code', 'course_no', 'course_title']
-    courses = etl.query_results_to_dataframe(extract_results, columns)
-    logger.info(f'COURSELEAF_COURSES: Read {courses.shape[0]} rows from SQLite database.')
-
-    courses.fillna('', inplace = True)
-    courses['load_id'] = load_id
-    courses['insert_timestamp'] = datetime.now()
-    courses = courses[['load_id'] + columns + ['insert_timestamp']]
-    logger.info(f'COURSELEAF_COURSES: Prepared {courses.shape[0]} rows for load to SQL Server.')
-
-    load_query = QUERIES['reg']['insert']['courseleaf']['courses']
-    load_data = etl.parameterize_data_frame(courses)
-    try:
-        etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
-        logger.info(f'COURSELEAF_COURSES: Load to SQL Server complete.')
-    except Exception as e:
-        logger.error(f'COURSELEAF_COURSES: {str(e)}')
-
-def extract_and_load_courseleaf_departments(load_id):
-    """
-    """
-    extract_query = QUERIES['courseleaf']['select']['departments']
-    try:
-        extract_results = etl.extract_from_sqlite(LOCAL_PATH_TO_DB, extract_query)
-    except Exception as e:
-        logger.error(f'COURSELEAF_DEPARTMENTS: {str(e)}')
-    columns = ['dept_no', 'dept_name', 'college', 'college_name']
-    departments = etl.query_results_to_dataframe(extract_results, columns)
-    logger.info(f'COURSELEAF_DEPARTMENTS: Read {departments.shape[0]} rows from SQLite database.')
-
-    departments.fillna('', inplace = True)
-    departments['load_id'] = load_id
-    departments['insert_timestamp'] = datetime.now()
-    departments = departments[['load_id'] + columns + ['insert_timestamp']]
-    logger.info(f'COURSELEAF_DEPARTMENTS: Prepared {departments.shape[0]} rows for load to SQL Server.')
-
-    load_query = QUERIES['reg']['insert']['courseleaf']['departments']
-    load_data = etl.parameterize_data_frame(departments)
-    try:
-        etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
-        logger.info(f'COURSELEAF_DEPARTMENTS: Load to SQL Server complete.')
-    except Exception as e:
-        logger.error(f'COURSELEAF_DEPARTMENTS: {str(e)}')
 
 def extract_and_load_courseleaf_roles(load_id):
     """Retrieve role membership data from CourseLeaf database file, transform results, and load to SQL Server.
@@ -365,32 +364,6 @@ def extract_and_load_courseleaf_roles(load_id):
     except Exception as e:
         logger.error(str(e))
 
-def extract_and_load_courseleaf_subjects(load_id):
-    """
-    """
-    extract_query = QUERIES['courseleaf']['select']['subjects']
-    try:
-        extract_results = etl.extract_from_sqlite(LOCAL_PATH_TO_DB, extract_query)
-    except Exception as e:
-        logger.error(f'COURSELEAF_SUBJECTS: {str(e)}')
-    columns = ['subject_code', 'subject', 'dept_no']
-    subjects = etl.query_results_to_dataframe(extract_results, columns)
-    logger.info(f'COURSELEAF_SUBJECTS: Read {subjects.shape[0]} rows from SQLite database.')
-
-    subjects.fillna('', inplace = True)
-    subjects['load_id'] = load_id
-    subjects['insert_timestamp'] = datetime.now()
-    subjects = subjects[['load_id'] + columns + ['insert_timestamp']]
-    logger.info(f'COURSELEAF_SUBJECTS: Prepared {subjects.shape[0]} rows for load to SQL Server.')
-
-    load_query = QUERIES['reg']['insert']['courseleaf']['subjects']
-    load_data = etl.parameterize_data_frame(subjects)
-    try:
-        etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
-        logger.info(f'COURSELEAF_SUBJECTS: Load to SQL Server complete.')
-    except Exception as e:
-        logger.error(f'COURSELEAF_SUBJECTS: {str(e)}')
-
 def extract_and_load_courseleaf_users(load_id):
     """
     """
@@ -422,6 +395,10 @@ def extract_and_load_courseleaf_users(load_id):
 # Putting this here in case I decide that I need to build more specialized presentation tables for PowerBI
 # I kinda already have some, I might need more, I might figure something else out, idk
 
+def build_powerbi_tables():
+    sp_query = QUERIES['reg']['stored_procedures']['generate_powerbi_crosslists']
+    qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, sp_query)
+
 # AGGREGATE FUNCTIONS
 
 def execute_banner_data_load():
@@ -430,7 +407,10 @@ def execute_banner_data_load():
     banner_load_id = insert_new_import_record('banner')
 
     extract_and_load_banner_courses(banner_load_id)
+    extract_and_load_banner_departments(banner_load_id)
+    extract_and_load_banner_subjects(banner_load_id)
     extract_and_load_banner_terms(banner_load_id)
+    extract_and_load_banner_userinfo(banner_load_id)
 
     # Manually call SP to update crosslists table after course load is done:
     sp_query = QUERIES['reg']['stored_procedures']['update_current_crosslists']
@@ -441,10 +421,7 @@ def execute_courseleaf_data_load():
     """
     courseleaf_load_id = insert_new_import_record('courseleaf')
 
-    extract_and_load_courseleaf_courses(courseleaf_load_id)
-    extract_and_load_courseleaf_departments(courseleaf_load_id)
     extract_and_load_courseleaf_roles(courseleaf_load_id)
-    extract_and_load_courseleaf_subjects(courseleaf_load_id)
     extract_and_load_courseleaf_users(courseleaf_load_id)
 
     # Manually call SP to end old roles where called for:
@@ -463,16 +440,20 @@ def truncate_database_tables():
     # to pursue right now, hence this overly-wordy comment.
 
     # Banner
-    for table in ['courses', 'departments', 'imports', 'subjects', 'userinfo']:
+    for table in ['courses', 'departments', 'imports', 'subjects', 'terms', 'userinfo']:
         truncate_query = QUERIES['reg']['truncate']['banner'][table]
         qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
     # Courseleaf
-    for table in ['courses', 'departments', 'imports', 'roles', 'subjects', 'users']:
+    for table in ['imports', 'roles', 'users']:
         truncate_query = QUERIES['reg']['truncate']['courseleaf'][table]
         qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
     # Current
     for table in ['courses', 'crosslists', 'departments', 'roles', 'subjects', 'users']:
         truncate_query = QUERIES['reg']['truncate']['current'][table]
+        qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
+    # Power BI
+    for table in ['crosslists']:
+        truncate_query = QUERIES['reg']['truncate']['powerbi'][table]
         qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
 
 ######################################################################################################
@@ -495,16 +476,14 @@ def main():
     if import_complete:
         execute_banner_data_load()
         execute_courseleaf_data_load()
+        build_powerbi_tables()
         logger.info('COURSELEAF_CONTACTS: Data load complete.')
     else:
         logger.error('COURSELEAF_CONTACTS: The CourseLeaf database file was not found. Aborting data load.')
-    
+
 def test():
-    qf.generate_query_yaml('queries', 'test.yaml')
-    # truncate_database_tables()
-    extract_and_load_banner_terms(1)
-    
+    build_powerbi_tables()
 
 if __name__ == "__main__":
-    # main()
-    test()
+    # test()
+    main()

@@ -4,7 +4,7 @@ INSERT INTO
         load_id,
         subject_code,
         subject,
-        dept_no,
+        subject_name_codebook,
         insert_timestamp
     )
 VALUES
