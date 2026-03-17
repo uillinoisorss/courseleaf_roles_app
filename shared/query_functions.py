@@ -164,3 +164,19 @@ def generate_query_yaml(query_dir, yaml_filename):
             logging.info(f'Query file {tail} has been written to the active directory')
         else:
             logging.info(f'Query file {tail} has been written to {head}')
+
+def load_query_yaml(query_dir, yaml_filename):
+    """Calls generate_query_yaml, then loads the created file and returns its contents
+    as a dictionary.
+
+    Args:
+        query_dir (path): path to top-level directory containing .sql files.
+        yaml_filename (path): path including filename where .yaml output should be written to.
+
+    Returns:
+        {str : str}: dictionary object containing text of SQL queries. 
+    """
+    generate_query_yaml(query_dir, yaml_filename)
+    with open(yaml_filename) as query_file:
+        queries = yaml.safe_load(query_file)
+    return queries
