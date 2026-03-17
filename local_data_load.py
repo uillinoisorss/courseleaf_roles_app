@@ -51,13 +51,7 @@ logging.basicConfig(filename = 'dev.log', encoding = 'utf-8', level = logging.DE
 # SQL QUERIES 
 ######################################################################################################
 
-# TODO because the QUERIES variable gets loaded from the file before the code has a chance to generate
-# a new file, the first run after updating a query will always have problems. Should probably wrap
-# all of this stuff in a function and call it at the start of main. Might be double work but should
-# have low overhead and makes certain that the newest queries are always being used.
-
-QUERY_FILE_PATH = 'test.yaml'
-# QUERY_FILE_PATH = 'queries.yaml'
+QUERY_FILE_PATH = 'queries.yaml'
 
 if not os.path.exists(QUERY_FILE_PATH):
     qf.generate_query_yaml('queries', QUERY_FILE_PATH)
@@ -70,8 +64,7 @@ with open(QUERY_FILE_PATH) as query_file:
 ######################################################################################################
 
 def validate_temp_directory():
-    """
-    Ensure that local temporary storage directory exists and delete any existing database file.
+    """Ensure that local temporary storage directory exists and delete any existing database file.
     """
     if not os.path.exists(LOCAL_TEMP_DIRECTORY):
         try:
@@ -88,7 +81,7 @@ def validate_temp_directory():
 
 def import_database_file() -> bool:
     """
-    Copy database file from SFTP server to local storage.
+    Copy CourseLeaf application database file from SFTP server to local storage.
 
     Returns:
         bool: True if the database file exists in local storage after import, False otherwise.
@@ -117,9 +110,6 @@ def import_database_file() -> bool:
         sftp.close()
         ssh.close()
     except Exception as e:
-        # More detailed error information I probably don't need:
-        # type, value, traceback = sys.exc_info()
-        # logger.error(f'{type}, {value}, {traceback}')
         logger.error(f'An exception was raised while attempting to retrieve database file via SFTP: {str(e)}')
     finally:
         end = timer()
@@ -183,7 +173,12 @@ def insert_new_import_record(table_group):
 
 def get_current_terms():
     """Retrieves codes for the current term, previous term, next term, and next next term from the ORMaintenance database.
+
+    Returns:
+        tuple[str]: tuple containing four 6-digit term codes as strings.
     """
+    # TODO I think that this can just be a regular tuple and not a namedtuple; I'm only using this
+    # method once and do not need keyword access for that usage.
     # Create a namedtuple blueprint
     Terms = namedtuple('Terms', ['current', 'previous', 'next', 'next_next'])
     extract_query = QUERIES['reg']['select']['terms']['current']
@@ -195,7 +190,10 @@ def get_current_terms():
 # BANNER ETL FUNCTIONS
     
 def extract_and_load_banner_courses(load_id):
-    """
+    """Retrieve course data from Banner, transform results, and load to SQL Server.
+    This function queries Banner four times: once each for the current term, previous term, next term, 
+    and term after the next term (the next next term). This is the range of terms that will typically
+    be of interest to coursr schedulers.
     """
     terms = get_current_terms()
     course_query = QUERIES['banner']['select']['courses']
@@ -223,6 +221,8 @@ def extract_and_load_banner_courses(load_id):
             logger.error(f'BANNER_COURSES: {str(e)}')
 
 def extract_and_load_banner_departments(load_id):
+    """Retrieve academic department data from Banner, transform results, and load to SQL Server.
+    """
     extract_query = QUERIES['banner']['select']['departments']
     try:
         departments = etl.extract_from_oracle(REPTPROD_HOSTNAME, REPTPROD_USERNAME, REPTPROD_PASSWORD, extract_query)
@@ -247,6 +247,8 @@ def extract_and_load_banner_departments(load_id):
         logger.error(f'BANNER_DEPARTMENTS: {str(e)}')
 
 def extract_and_load_banner_subjects(load_id):
+    """Retrieve subject area data from Banner, transform results, and load to SQL Server.
+    """
     extract_query = QUERIES['banner']['select']['subjects']
     try:
         subjects = etl.extract_from_oracle(REPTPROD_HOSTNAME, REPTPROD_USERNAME, REPTPROD_PASSWORD, extract_query)
@@ -271,6 +273,8 @@ def extract_and_load_banner_subjects(load_id):
         logger.error(f'BANNER_SUBJECTS: {str(e)}')
 
 def extract_and_load_banner_terms(load_id):
+    """Retrieve academic term data from Banner, transform results, and load to SQL Server.
+    """
     extract_query = QUERIES['banner']['select']['terms']
     try:
         terms = etl.extract_from_oracle(REPTPROD_HOSTNAME, REPTPROD_USERNAME, REPTPROD_PASSWORD, extract_query)
@@ -365,7 +369,7 @@ def extract_and_load_courseleaf_roles(load_id):
         logger.error(str(e))
 
 def extract_and_load_courseleaf_users(load_id):
-    """
+    """Retrieve user identity data from CourseLeaf database file, transform results, and load to SQL Server.
     """
     extract_query = QUERIES['courseleaf']['select']['users']
     try:
@@ -392,10 +396,10 @@ def extract_and_load_courseleaf_users(load_id):
 
 # POWERBI ETL FUNCTIONS
 
-# Putting this here in case I decide that I need to build more specialized presentation tables for PowerBI
-# I kinda already have some, I might need more, I might figure something else out, idk
-
 def build_powerbi_tables():
+    """ Calls a stored procedyure to create/update the special reference table that Power BI 
+    needs to properly display all courses in the same crosslist group.
+    """
     sp_query = QUERIES['reg']['stored_procedures']['generate_powerbi_crosslists']
     qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, sp_query)
 
@@ -463,7 +467,7 @@ def truncate_database_tables():
 def main():
     logger.info('COURSELEAF_CONTACTS: Initializing data load.')
     # Always generate new query yaml first to capture any changes made to queries between loads
-    qf.generate_query_yaml('queries', 'test.yaml')
+    QUERIES = qf.load_query_yaml('queries', QUERY_FILE_PATH)
 
     # This will truncate all app database tables before proceeding with data load.
     # For testing only!!! Remove this before running in production.
