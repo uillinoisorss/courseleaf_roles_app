@@ -1,6 +1,7 @@
 """Complete process for loading CourseLeaf application data to SQL Server database without Azure.
+This code was used to populate the application database before we could get the Azure function
+running. It was also instrumental in developing and testing the backend architecture for the app.
 """
-from collections import namedtuple
 from datetime import datetime
 import io
 import logging
@@ -34,10 +35,10 @@ XFERPROD_HOSTNAME = str(os.getenv('XFERPROD_HOST'))
 XFERPROD_USERNAME = str(os.getenv('XFERPROD_USERNAME'))
 XFERPROD_PKEY = str(os.getenv('XFERPROD_PKEY'))
 
-DB_FILE_NAME = 'tcfdb.sqlite'
+DB_FILE_NAME = str(os.getenv('DB_FILE_NAME'))
 
 # Tried using os.path.join here, but it didn't play well with the SFTP connector
-XFERPROD_DATA_DIRECTORY = '/export/home/student/scat/CourseLeafDataWarehouse/'
+XFERPROD_DATA_DIRECTORY = str(os.getenv('XFERPROD_DATA_DIRECTORY'))
 LOCAL_TEMP_DIRECTORY = tempfile.gettempdir()
 
 SFTP_PATH_TO_DB = XFERPROD_DATA_DIRECTORY + DB_FILE_NAME
@@ -51,13 +52,14 @@ logging.basicConfig(filename = 'dev.log', encoding = 'utf-8', level = logging.DE
 # SQL QUERIES 
 ######################################################################################################
 
-QUERY_FILE_PATH = 'queries.yaml'
+QUERY_FILE_PATH = str(os.getenv('QUERY_FILE_PATH')) # A .yaml file containing all queries in QUERY_FOLDER_PATH will be written at this path
+QUERY_FOLDER_PATH = str(os.getenv('QUERY_FOLDER_PATH')) # All SQL queries in this directory will be loaded into a .yaml file
 
 if not os.path.exists(QUERY_FILE_PATH):
-    qf.generate_query_yaml('queries', QUERY_FILE_PATH)
+    qf.generate_query_yaml(QUERY_FOLDER_PATH, QUERY_FILE_PATH)
 
 with open(QUERY_FILE_PATH) as query_file:
-        QUERIES = load(query_file)
+    QUERIES = load(query_file)
 
 ######################################################################################################
 # FUNCTIONS
@@ -177,15 +179,10 @@ def get_current_terms():
     Returns:
         tuple[str]: tuple containing four 6-digit term codes as strings.
     """
-    # TODO I think that this can just be a regular tuple and not a namedtuple; I'm only using this
-    # method once and do not need keyword access for that usage.
-    # Create a namedtuple blueprint
-    Terms = namedtuple('Terms', ['current', 'previous', 'next', 'next_next'])
     extract_query = QUERIES['reg']['select']['terms']['current']
     terms = etl.extract_from_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, extract_query)
     # Query results are a tuple wrapped in a list, so need to access the tuple from the list first.
-    # Then the values are constructed into a namedtuple to allow keyword access.
-    return Terms._make(terms[0]) 
+    return terms[0] 
     
 # BANNER ETL FUNCTIONS
     
