@@ -337,22 +337,29 @@ BEGIN
 	WITH crosslists AS
 	(
 	SELECT
+		crosslist_effective_term,
 		course,
-		controlling_course
+		controlling_course,
+		is_crosslisted,
+		is_controlling
 	FROM
 		current_crosslists
 	),
 	is_not_self AS
 	(
 	SELECT
+		crosslists.crosslist_effective_term as term,
 		crosslists.course AS selected_course,
 		crosslists.controlling_course AS controlling_course,
-		courses.course AS courses_in_group
+		courses.course AS courses_in_group,
+		courses.is_crosslisted AS is_crosslisted,
+		courses.is_controlling AS is_controlling
 	FROM
 		crosslists
 		JOIN crosslists courses ON (
 			crosslists.course <> courses.course
 			AND crosslists.controlling_course = courses.controlling_course
+			AND crosslists.crosslist_effective_term = courses.crosslist_effective_term
 		)
 	WHERE
 		crosslists.controlling_course IS NOT NULL
@@ -360,14 +367,18 @@ BEGIN
 	is_self AS
 	(
 	SELECT
+		crosslists.crosslist_effective_term as term,
 		crosslists.course AS selected_course,
 		crosslists.controlling_course AS controlling_course,
-		courses.course AS courses_in_group
+		courses.course AS courses_in_group,
+		courses.is_crosslisted AS is_crosslisted,
+		courses.is_controlling AS is_controlling
 	FROM
 		crosslists
 		JOIN crosslists courses ON (
 			crosslists.course = courses.course
 			AND crosslists.controlling_course = courses.controlling_course
+			AND crosslists.crosslist_effective_term = courses.crosslist_effective_term
 		)
 	WHERE
 		crosslists.controlling_course IS NOT NULL
@@ -385,18 +396,15 @@ BEGIN
 		is_self
 	)
 	INSERT INTO
-		dbo.powerbi_crosslists (selected_course, controlling_course, courses_in_group, is_controlling)
+		dbo.powerbi_crosslists (crosslist_effective_term, selected_course, controlling_course, courses_in_group, is_crosslisted, is_controlling)
 	SELECT
-		all_courses.*,
-		CASE
-			WHEN controlling_course = courses_in_group THEN 'Y'
-			ELSE 'N'
-		END as controlling
+		all_courses.*
 	FROM
 		all_courses
 	ORDER BY
 		controlling_course,
 		selected_course,
+		term,
 		courses_in_group
 	;
 END
