@@ -193,7 +193,7 @@ def extract_and_load_banner_courses(load_id):
     """Retrieve course data from Banner, transform results, and load to SQL Server.
     This function queries Banner four times: once each for the current term, previous term, next term, 
     and term after the next term (the next next term). This is the range of terms that will typically
-    be of interest to coursr schedulers.
+    be of interest to course schedulers.
     """
     terms = get_current_terms()
     course_query = QUERIES['banner']['select']['courses']
