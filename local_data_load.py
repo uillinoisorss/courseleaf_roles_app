@@ -55,6 +55,10 @@ logging.basicConfig(filename = 'dev.log', encoding = 'utf-8', level = logging.DE
 QUERY_FILE_PATH = str(os.getenv('QUERY_FILE_PATH')) # A .yaml file containing all queries in QUERY_FOLDER_PATH will be written at this path
 QUERY_FOLDER_PATH = str(os.getenv('QUERY_FOLDER_PATH')) # All SQL queries in this directory will be loaded into a .yaml file
 
+# There's probably a better way to do this, but I ensure that QUERIES is loaded here to satisfy
+# the type checker and then I load QUERIES again in main() to guarantee that only the most current'
+# queries get used.
+
 if not os.path.exists(QUERY_FILE_PATH):
     qf.generate_query_yaml(QUERY_FOLDER_PATH, QUERY_FILE_PATH)
 
@@ -403,7 +407,7 @@ def build_powerbi_tables():
 # AGGREGATE FUNCTIONS
 
 def execute_banner_data_load():
-    """Same thing as below but for the Banner stuff we care about.
+    """Triggers all Banner ETL functions in sequence.
     """
     banner_load_id = insert_new_import_record('banner')
 
@@ -418,7 +422,7 @@ def execute_banner_data_load():
     qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, sp_query)
 
 def execute_courseleaf_data_load():
-    """This just runs all of the other CourseLeaf ETL functions. Is this modularity?
+    """Triggers all CourseLeaf ETL functions in sequence.
     """
     courseleaf_load_id = insert_new_import_record('courseleaf')
 
@@ -431,7 +435,6 @@ def execute_courseleaf_data_load():
 
 def truncate_database_tables():
     """Truncates all application database tables. Only to be used when resetting database for testing purposes.
-    Probably dangerous to leave laying around, but whatever.
     """
     # TODO while this might be deleted in a later version of the app, when things are working
     # and there's no reasonable justification for needing to erase all of the data in the 
@@ -482,9 +485,5 @@ def main():
     else:
         logger.error('COURSELEAF_CONTACTS: The CourseLeaf database file was not found. Aborting data load.')
 
-def test():
-    build_powerbi_tables()
-
 if __name__ == "__main__":
-    # test()
     main()
