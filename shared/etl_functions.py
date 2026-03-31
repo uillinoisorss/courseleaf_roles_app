@@ -1,3 +1,9 @@
+"""Generic functions for handling ETL transactions with a few database types.
+Currently implemented:
+    - SQL Server (extract and load)
+    - Oracle DB (extract)
+    - SQLite (extract)
+"""
 import logging
 import os
 import sqlite3 as sqlite

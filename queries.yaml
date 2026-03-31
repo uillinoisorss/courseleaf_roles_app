@@ -1,69 +1,55 @@
-# Queries are stored in this hierarchy:
-# [database][query type][target table group][target table]
-#
-# Select queries have an additional level that designates the query's purpose:
-# [database][query type][select element][target table group][target table]
 banner:
   select:
-    courses: WITH ActiveCourses AS ( SELECT CourseInfo.SCBCRSE_Subj_Code AS Subject, CourseInfo.SCBCRSE_Crse_Numb AS CourseNumber, CourseInfo.SCBCRSE_Subj_Code||' '||CourseInfo.SCBCRSE_Crse_Numb AS Course, NVL( (SELECT CourseSyllabus.SCRSYLN_Long_Course_Title FROM SATURN.SCRSYLN CourseSyllabus WHERE CourseSyllabus.SCRSYLN_Subj_Code = CourseInfo.SCBCRSE_Subj_Code AND CourseSyllabus.SCRSYLN_Crse_Numb = CourseInfo.SCBCRSE_Crse_Numb AND CourseSyllabus.SCRSYLN_Term_Code_Eff = (SELECT MAX(SyllabusTerm.SCRSYLN_Term_Code_Eff) FROM SATURN.SCRSYLN SyllabusTerm WHERE SyllabusTerm.SCRSYLN_Term_Code_Eff <= CourseInfo.SCBCRSE_Eff_Term AND SyllabusTerm.SCRSYLN_Subj_Code = CourseSyllabus.SCRSYLN_Subj_Code AND SyllabusTerm.SCRSYLN_Crse_Numb = CourseSyllabus.SCRSYLN_Crse_Numb)), CourseInfo.SCBCRSE_Title ) AS CourseTitle, CourseInfo.SCBCRSE_CSTA_Code AS Status, CourseInfo.SCBCRSE_Eff_Term AS EffectiveTerm, CourseInfo.SCBCRSE_Coll_Code AS College, CourseInfo.SCBCRSE_Dept_Code AS DepartmentCode, (SELECT DepartmentInfo.STVDEPT_Desc FROM SATURN.STVDEPT DepartmentInfo WHERE DepartmentInfo.STVDEPT_Code = CourseInfo.SCBCRSE_Dept_Code) AS Department, CourseInfo.SCBCRSE_Aprv_Code AS ControlCode, ROW_NUMBER() OVER (PARTITION BY CourseInfo.SCBCRSE_Subj_Code||' '||CourseInfo.SCBCRSE_Crse_Numb ORDER BY CourseInfo.SCBCRSE_Eff_Term DESC) AS RowNumber FROM SATURN.SCBCRSE CourseInfo LEFT OUTER JOIN SATURN.SCRSYLN CourseSyllabus ON (CourseInfo.SCBCRSE_Subj_Code = CourseSyllabus.SCRSYLN_Subj_Code AND CourseInfo.SCBCRSE_Crse_Numb = CourseSyllabus.SCRSYLN_Crse_Numb AND CourseSyllabus.SCRSYLN_Term_Code_Eff <= :TERM) WHERE CourseInfo.SCBCRSE_CSTA_Code = 'A' AND CourseInfo.SCBCRSE_VPDI_Code = '1UIUC' AND CourseInfo.SCBCRSE_Eff_Term <= :TERM ), SupplementalCourseInfo AS ( SELECT CourseSupplement.SCBSUPP_Subj_Code AS Subject, CourseSupplement.SCBSUPP_Crse_Numb AS CourseNumber, CourseSupplement.SCBSUPP_Subj_Code||' '||CourseSupplement.SCBSUPP_Crse_Numb AS Course, CourseSupplement.SCBSUPP_Perm_Dist_Ind AS CourseID, CourseSupplement.SCBSUPP_Credit_Category_Ind AS ControlSubject, CourseSupplement.SCBSUPP_Eff_Term AS EffectiveTerm, ROW_NUMBER() OVER (PARTITION BY CourseSupplement.SCBSUPP_Subj_Code||' '||CourseSupplement.SCBSUPP_Crse_Numb ORDER BY CourseSupplement.SCBSUPP_Eff_Term DESC) AS RowNumber FROM SATURN.SCBSUPP CourseSupplement WHERE CourseSupplement.SCBSUPP_VPDI_Code = '1UIUC' AND CourseSupplement.SCBSUPP_Eff_Term <= :TERM ), ActiveCoursesInTerm AS ( SELECT CourseKey.SCBCRKY_Subj_Code AS Subject, CourseKey.SCBCRKY_Crse_Numb AS CourseNumber, CourseKey.SCBCRKY_Subj_Code||' '||CourseKey.SCBCRKY_Crse_Numb AS Course, CourseKey.SCBCRKY_Term_Code_Start AS CourseStartTerm, CourseKey.SCBCRKY_Term_Code_End AS CourseEndTerm FROM SATURN.SCBCRKY CourseKey WHERE :TERM BETWEEN CourseKey.SCBCRKY_Term_Code_Start AND CourseKey.SCBCRKY_Term_Code_End AND CourseKey.SCBCRKY_VPDI_Code = '1UIUC' ), AllCourseInfo AS ( SELECT ActiveCourses.Subject AS Subject, ActiveCourses.CourseNumber AS CourseNumber, ActiveCourses.Course AS Course, ActiveCourses.CourseTitle AS CourseTitle, ActiveCourses.College AS College, ActiveCourses.DepartmentCode AS Department, ActiveCourses.ControlCode AS ControlCode, SupplementalCourseInfo.CourseID AS CourseID, ActiveCoursesInTerm.CourseStartTerm AS CourseStartTerm, ActiveCoursesInTerm.CourseEndTerm AS CourseEndTerm, ActiveCourses.EffectiveTerm AS CourseEffectiveTerm, ActiveCourses.Status AS Status FROM ActiveCourses JOIN SupplementalCourseInfo ON ActiveCourses.Course = SupplementalCourseInfo.Course JOIN ActiveCoursesInTerm ON ActiveCourses.Course = ActiveCoursesInTerm.Course WHERE ActiveCourses.RowNumber = 1 AND SupplementalCourseInfo.RowNumber = 1 ), banner_courses AS ( SELECT Course AS course, Subject AS subject_code, CourseNumber AS course_no, CourseTitle AS course_title, College AS college, Department AS dept_no, ControlCode AS control_code, CourseID AS course_id, CourseStartTerm AS course_start_term, CourseEndTerm AS course_end_term, CourseEffectiveTerm AS course_effective_term, Status AS status FROM AllCourseInfo ) SELECT * FROM banner_courses ORDER BY course
-    departments: SELECT STVDEPT_CODE AS dept_no, STVDEPT_DESC AS dept_name, NULL AS college, NULL AS college_name FROM SATURN.STVDEPT WHERE SUBSTR(STVDEPT_CODE, 1, 1) = '1' ORDER BY STVDEPT_CODE 
-    subjects: SELECT STVSUBJ_CODE AS subject_code, STVSUBJ_DESC AS subject, NULL AS dept_no FROM SATURN.STVSUBJ WHERE STVSUBJ_DISP_WEB_IND = 'Y' ORDER BY STVSUBJ_CODE 
-    user_info:
+    courses: WITH ActiveCourses AS ( SELECT CourseInfo.SCBCRSE_Subj_Code AS Subject, CourseInfo.SCBCRSE_Crse_Numb AS CourseNumber, CourseInfo.SCBCRSE_Subj_Code||' '||CourseInfo.SCBCRSE_Crse_Numb AS Course, NVL( (SELECT CourseSyllabus.SCRSYLN_Long_Course_Title FROM SATURN.SCRSYLN CourseSyllabus WHERE CourseSyllabus.SCRSYLN_Subj_Code = CourseInfo.SCBCRSE_Subj_Code AND CourseSyllabus.SCRSYLN_Crse_Numb = CourseInfo.SCBCRSE_Crse_Numb AND CourseSyllabus.SCRSYLN_Term_Code_Eff = (SELECT MAX(SyllabusTerm.SCRSYLN_Term_Code_Eff) FROM SATURN.SCRSYLN SyllabusTerm WHERE SyllabusTerm.SCRSYLN_Term_Code_Eff <= CourseInfo.SCBCRSE_Eff_Term AND SyllabusTerm.SCRSYLN_Subj_Code = CourseSyllabus.SCRSYLN_Subj_Code AND SyllabusTerm.SCRSYLN_Crse_Numb = CourseSyllabus.SCRSYLN_Crse_Numb)), CourseInfo.SCBCRSE_Title ) AS CourseTitle, CourseInfo.SCBCRSE_CSTA_Code AS Status, CourseInfo.SCBCRSE_Eff_Term AS EffectiveTerm, CourseInfo.SCBCRSE_Coll_Code AS College, CourseInfo.SCBCRSE_Dept_Code AS DepartmentCode, (SELECT DepartmentInfo.STVDEPT_Desc FROM SATURN.STVDEPT DepartmentInfo WHERE DepartmentInfo.STVDEPT_Code = CourseInfo.SCBCRSE_Dept_Code) AS Department, CourseInfo.SCBCRSE_Aprv_Code AS ControlCode, ROW_NUMBER() OVER (PARTITION BY CourseInfo.SCBCRSE_Subj_Code||' '||CourseInfo.SCBCRSE_Crse_Numb ORDER BY CourseInfo.SCBCRSE_Eff_Term DESC) AS RowNumber FROM SATURN.SCBCRSE CourseInfo LEFT OUTER JOIN SATURN.SCRSYLN CourseSyllabus ON (CourseInfo.SCBCRSE_Subj_Code = CourseSyllabus.SCRSYLN_Subj_Code AND CourseInfo.SCBCRSE_Crse_Numb = CourseSyllabus.SCRSYLN_Crse_Numb AND CourseSyllabus.SCRSYLN_Term_Code_Eff <= :TERM) WHERE CourseInfo.SCBCRSE_CSTA_Code = 'A' AND CourseInfo.SCBCRSE_VPDI_Code = '1UIUC' AND CourseInfo.SCBCRSE_Eff_Term <= :TERM ), SupplementalCourseInfo AS ( SELECT CourseSupplement.SCBSUPP_Subj_Code AS Subject, CourseSupplement.SCBSUPP_Crse_Numb AS CourseNumber, CourseSupplement.SCBSUPP_Subj_Code||' '||CourseSupplement.SCBSUPP_Crse_Numb AS Course, CourseSupplement.SCBSUPP_Perm_Dist_Ind AS CourseID, CourseSupplement.SCBSUPP_Credit_Category_Ind AS ControlSubject, CourseSupplement.SCBSUPP_Eff_Term AS EffectiveTerm, ROW_NUMBER() OVER (PARTITION BY CourseSupplement.SCBSUPP_Subj_Code||' '||CourseSupplement.SCBSUPP_Crse_Numb ORDER BY CourseSupplement.SCBSUPP_Eff_Term DESC) AS RowNumber FROM SATURN.SCBSUPP CourseSupplement WHERE CourseSupplement.SCBSUPP_VPDI_Code = '1UIUC' AND CourseSupplement.SCBSUPP_Eff_Term <= :TERM ), ActiveCoursesInTerm AS ( SELECT CourseKey.SCBCRKY_Subj_Code AS Subject, CourseKey.SCBCRKY_Crse_Numb AS CourseNumber, CourseKey.SCBCRKY_Subj_Code||' '||CourseKey.SCBCRKY_Crse_Numb AS Course, CourseKey.SCBCRKY_Term_Code_Start AS CourseStartTerm, CourseKey.SCBCRKY_Term_Code_End AS CourseEndTerm FROM SATURN.SCBCRKY CourseKey WHERE :TERM BETWEEN CourseKey.SCBCRKY_Term_Code_Start AND CourseKey.SCBCRKY_Term_Code_End AND CourseKey.SCBCRKY_VPDI_Code = '1UIUC' ), AllCourseInfo AS ( SELECT ActiveCourses.Subject AS Subject, ActiveCourses.CourseNumber AS CourseNumber, ActiveCourses.Course AS Course, ActiveCourses.CourseTitle AS CourseTitle, ActiveCourses.College AS College, ActiveCourses.DepartmentCode AS Department, ActiveCourses.ControlCode AS ControlCode, SupplementalCourseInfo.CourseID AS CourseID, ActiveCoursesInTerm.CourseStartTerm AS CourseStartTerm, ActiveCoursesInTerm.CourseEndTerm AS CourseEndTerm, ActiveCourses.EffectiveTerm AS CourseEffectiveTerm, ActiveCourses.Status AS Status FROM ActiveCourses JOIN SupplementalCourseInfo ON ActiveCourses.Course = SupplementalCourseInfo.Course JOIN ActiveCoursesInTerm ON ActiveCourses.Course = ActiveCoursesInTerm.Course WHERE ActiveCourses.RowNumber = 1 AND SupplementalCourseInfo.RowNumber = 1 ), banner_courses AS ( SELECT :TERM AS term, Course AS course, Subject AS subject_code, CourseNumber AS course_no, CourseTitle AS course_title, College AS college, Department AS dept_no, ControlCode AS control_code, CourseID AS course_id, CourseStartTerm AS course_start_term, CourseEndTerm AS course_end_term, CourseEffectiveTerm AS course_effective_term, Status AS status FROM AllCourseInfo ) SELECT * FROM banner_courses ORDER BY course
+    departments: SELECT STVDEPT_CODE AS dept_no, STVDEPT_DESC AS dept_name FROM SATURN.STVDEPT WHERE SUBSTR(STVDEPT_CODE, 1, 1) = '1' ORDER BY STVDEPT_CODE
+    subjects: SELECT banner_subjects.STVSUBJ_CODE AS subject_code, banner_subjects.STVSUBJ_DESC AS subject, codebook_subjects.SUBJ_NAME_FULL AS subject_name_codebook FROM SATURN.STVSUBJ banner_subjects LEFT OUTER JOIN CODEBOOK.T_SUBJ codebook_subjects ON ( banner_subjects.STVSUBJ_CODE = codebook_subjects.SUBJ_CD AND codebook_subjects.SUBJ_CHANGE_EXP_DT IS NULL AND codebook_subjects.SUBJ_CAMPUS_CD = '100' ) WHERE banner_subjects.STVSUBJ_DISP_WEB_IND = 'Y' ORDER BY subject_code
+    terms: SELECT STVTERM_CODE AS term_code, STVTERM_DESC AS term_name_full, CASE WHEN STVTERM_DESC LIKE '%Academic Year%' THEN STVTERM_DESC WHEN STVTERM_DESC LIKE '%Winter%' THEN SUBSTR(STVTERM_DESC, 1, INSTR(STVTERM_DESC, ' ', 8)) ELSE SUBSTR(STVTERM_DESC, 1, INSTR(STVTERM_DESC, ' -')) END AS term_name, STVTERM_START_DATE AS term_start_date, STVTERM_END_DATE AS term_end_date FROM SATURN.STVTERM WHERE SUBSTR(STVTERM_CODE, 1, 1) = '1' AND STVTERM_CODE < '199999' AND STVTERM_CODE >= '120048' AND STVTERM_TRMT_CODE IN ('S') ORDER BY STVTERM_CODE
+    userinfo: ''
 courseleaf:
   select:
-    courses: SELECT code AS course, dept AS subject_code, SUBSTR(code, LENGTH(dept) + 2) AS course_no, title AS course_title FROM course WHERE code <> '' AND title <> '' AND SUBSTR(code, 1, LENGTH(dept)) = dept AND LENGTH(SUBSTR(code, LENGTH(dept) + 2)) = 3 ORDER BY code ;
-    departments: WITH original_departments AS ( SELECT DISTINCT department AS dept_no, ( SELECT stvdept_desc FROM stvdept_orig WHERE cimlookup.department = stvdept_orig.stvdept_code ) AS dept_name, ( SELECT college FROM cimlookup cl2 WHERE cimlookup.department = cl2.department AND college IS NOT NULL ) AS college FROM cimlookup WHERE department IS NOT NULL ORDER BY department ), override_departments AS ( SELECT DISTINCT stvdept_code AS dept_no, ( SELECT override2.newval FROM stvdept_oride override2 WHERE override2.stvdept_code = stvdept_oride.stvdept_code AND override2.fieldname = 'stvdept_desc' ) AS dept_name FROM stvdept_oride ) SELECT orig.dept_no AS dept_no, CASE WHEN oride.dept_name IS NOT NULL THEN oride.dept_name WHEN orig.dept_name IS NOT NULL THEN orig.dept_name ELSE ( SELECT stvdept_desc FROM stvdept WHERE stvdept_code = orig.dept_no ) END AS dept_name, orig.college AS college, ( SELECT codedesc.name FROM codedesc WHERE codedesc.setname = 'college' AND codedesc.code = orig.college ) AS college_name FROM original_departments orig LEFT JOIN override_departments oride ON orig.dept_no = oride.dept_no ORDER BY orig.dept_no ;
-    roles: WITH roles AS ( SELECT s1.value as name, s2.value as members, s3.value as email FROM pages JOIN tcdata using(pagekey) JOIN tcval s1 using(tckey) JOIN tcval s2 using (tckey,rank) JOIN tcval s3 using (tckey,rank) WHERE pages.path = '/courseleaf/roles.html' AND tcdata.tctype = 'tcf' AND s1.part= 'name' AND s2.part= 'members' AND s3.part = 'email' ) SELECT * FROM roles WHERE roles.members IS NOT NULL ;
-    subjects: WITH original_subjects AS ( SELECT DISTINCT stvsubj_code AS subject_code FROM stvsubj_orig WHERE NOT EXISTS ( SELECT stvsubj_code FROM stvsubj_oride WHERE stvsubj_oride.stvsubj_code = stvsubj_orig.stvsubj_code AND stvsubj_oride.fieldname = 'stvsubj_code' AND stvsubj_oride.newval IS NULL ) ORDER BY stvsubj_code ), override_subjects AS ( SELECT stvsubj_code AS subject_code FROM stvsubj_oride WHERE fieldname = 'stvsubj_code' AND oldval IS NULL ), all_subjects AS ( SELECT * FROM original_subjects UNION SELECT * FROM override_subjects ) SELECT subject_code, IFNULL( ( SELECT oride.newval FROM stvsubj_oride oride WHERE oride.stvsubj_code = all_subjects.subject_code AND oride.fieldname = 'stvsubj_desc' AND oride.newval IS NOT NULL ), ( SELECT orig.stvsubj_desc FROM stvsubj_orig orig WHERE orig.stvsubj_code = all_subjects.subject_code ) ) AS subject, ( SELECT cimlookup.department FROM cimlookup WHERE cimlookup.subject = all_subjects.subject_code AND cimlookup.department IS NOT NULL ) AS dept_no FROM all_subjects ORDER BY subject_code ;
-    users: SELECT userid AS uin, lname AS last_name, fname AS first_name, email AS email FROM users WHERE LENGTH(uin) = 9 ;
-registrar:
-  select:
-    # I'll do away with the load id queries eventually, as load ids are supposed to be centralized in the _imports tables,
-    # I'm just not worrying about that part at this stage of development.
-    load_id:
-      banner:
-        courses: SELECT ISNULL(MAX(load_id), 0) AS max_load_id FROM [CourseLeaf_Contacts].[dbo].[banner_courses] ;
-        departments: SELECT ISNULL(MAX(load_id), 0) AS max_load_id FROM [CourseLeaf_Contacts].[dbo].[banner_departments] ;
-        subjects: SELECT ISNULL(MAX(load_id), 0) AS max_load_id FROM [CourseLeaf_Contacts].[dbo].[banner_subjects] ;
-        user_info: SELECT ISNULL(MAX(load_id), 0) AS max_load_id FROM [CourseLeaf_Contacts].[dbo].[banner_users]
-      courseleaf:
-        courses: SELECT ISNULL(MAX(load_id), 0) AS max_load_id FROM [CourseLeaf_Contacts].[dbo].[courseleaf_courses] ;
-        departments: SELECT ISNULL(MAX(load_id), 0) AS max_load_id FROM [CourseLeaf_Contacts].[dbo].[courseleaf_departments] ;
-        roles: SELECT ISNULL(MAX(load_id), 0) AS max_load_id FROM [CourseLeaf_Contacts].[dbo].[courseleaf_roles] ;
-        subjects: SELECT ISNULL(MAX(load_id), 0) AS max_load_id FROM [CourseLeaf_Contacts].[dbo].[courseleaf_subjects] ;
-        users: SELECT ISNULL(MAX(load_id), 0) AS max_load_id FROM [CourseLeaf_Contacts].[dbo].[courseleaf_users] ;
+    roles: WITH roles AS ( SELECT s1.value as name, s2.value as members, s3.value as email FROM pages JOIN tcdata using(pagekey) JOIN tcval s1 using(tckey) JOIN tcval s2 using (tckey,rank) JOIN tcval s3 using (tckey,rank) WHERE pages.path = '/courseleaf/roles.html' AND tcdata.tctype = 'tcf' AND s1.part= 'name' AND s2.part= 'members' AND s3.part = 'email' ) SELECT * FROM roles WHERE roles.members IS NOT NULL
+    users: SELECT userid AS uin, lname AS last_name, fname AS first_name, email AS email FROM users WHERE LENGTH(uin) = 9
+reg:
   insert:
-    banner: 
-      # TODO finish these
-      courses: INSERT INTO [CourseLeaf_Contacts].[dbo].[banner_courses] ( load_id, course, subject_code, course_no, course_title, college, dept_no, control_code, course_id, course_start_term, course_end_term, course_effective_term, status, insert_timestamp ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ;
-      departments: INSERT INTO [CourseLeaf_Contacts].[dbo].[banner_departments] () VALUES () ;
-      subjects: INSERT INTO [CourseLeaf_Contacts].[dbo].[banner_subjects] () VALUES () ;
-      user_info: INSERT INTO [CourseLeaf_Contacts].[dbo].[banner_user_info] () VALUES () ;
-    courseleaf: 
-      courses: INSERT INTO [CourseLeaf_Contacts].[dbo].[courseleaf_courses] ( load_id, course, subject_code, course_no, course_title, insert_timestamp ) VALUES ( ?, ?, ?, ?, ?, ? ) ;
-      departments: INSERT INTO [CourseLeaf_Contacts].[dbo].[courseleaf_departments] ( load_id, dept_no, dept_name, college, college_name, insert_timestamp ) VALUES ( ?, ?, ?, ?, ?, ? ) ; 
-      roles: INSERT INTO [CourseLeaf_Contacts].[dbo].[courseleaf_roles] ( load_id, role, dept_no, dept, role_title, uin, insert_timestamp ) VALUES ( ?, ?, ?, ?, ?, ?, ? ) ;
-      subjects: INSERT INTO [CourseLeaf_Contacts].[dbo].[courseleaf_subjects] ( load_id, subject_code, subject, dept_no, insert_timestamp ) VALUES ( ?, ?, ?, ?, ? ) ;
-      users: INSERT INTO [CourseLeaf_Contacts].[dbo].[courseleaf_users] ( load_id, uin, last_name, first_name, email, insert_timestamp ) VALUES ( ?, ?, ?, ?, ?, ? ) ;
+    banner:
+      courses: INSERT INTO [CourseLeaf_Contacts].[dbo].[banner_courses] ( load_id, term, course, subject_code, course_no, course_title, college, dept_no, control_code, course_id, course_start_term, course_end_term, course_effective_term, status, insert_timestamp ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )
+      departments: INSERT INTO [CourseLeaf_Contacts].[dbo].[banner_departments] ( load_id, dept_no, dept_name, insert_timestamp ) VALUES ( ?, ?, ?, ? )
+      imports: INSERT INTO [CourseLeaf_Contacts].[dbo].[banner_imports] ( load_timestamp ) VALUES ( ? )
+      subjects: INSERT INTO [CourseLeaf_Contacts].[dbo].[banner_subjects] ( load_id, subject_code, subject, subject_name_codebook, insert_timestamp ) VALUES ( ?, ?, ?, ?, ? )
+      terms: INSERT INTO [CourseLeaf_Contacts].[dbo].[banner_terms] ( load_id, term_code, term_name_full, term_name, term_start_date, term_end_date, insert_timestamp ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+      userinfo: INSERT INTO [CourseLeaf_Contacts].[dbo].[banner_user_info] ( load_id, uin, last_name, first_name, email, insert_timestamp ) VALUES ( ?, ?, ?, ?, ?, ? )
+    courseleaf:
+      imports: INSERT INTO [CourseLeaf_Contacts].[dbo].[courseleaf_imports] ( load_timestamp ) VALUES ( ? ) ;
+      roles: INSERT INTO [CourseLeaf_Contacts].[dbo].[courseleaf_roles] ( load_id, role, dept_no, dept, role_title, uin, insert_timestamp ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+      users: INSERT INTO [CourseLeaf_Contacts].[dbo].[courseleaf_users] ( load_id, uin, last_name, first_name, email, insert_timestamp ) VALUES ( ?, ?, ?, ?, ?, ? )
+  select:
+    loadid:
+      banner: SELECT ISNULL(MAX(load_id), 0) AS max_load_id FROM [CourseLeaf_Contacts].[dbo].[banner_imports]
+      courseleaf: SELECT ISNULL(MAX(load_id), 0) AS max_load_id FROM [CourseLeaf_Contacts].[dbo].[courseleaf_imports]
+    terms:
+      current: SELECT Term AS current_term, PrevTerm AS previous_term, NextTerm AS next_term, Next2Term AS next_next_term FROM [ORMaintenance].[dbo].[TblTerms] WHERE CURRENT_TERM = 'X'
+  stored_procedures:
+    deactivate_old_roles: EXEC [CourseLeaf_Contacts].[dbo].[deactivate_old_roles]
+    generate_powerbi_crosslists: EXEC [CourseLeaf_Contacts].[dbo].[generate_powerbi_crosslists]
+    update_current_crosslists: EXEC [CourseLeaf_Contacts].[dbo].[update_current_crosslists]
   truncate:
     banner:
-      courses: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[banner_courses] ;
-      departments: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[banner_departments] ;
-      subjects: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[banner_subjects] ;
-      user_info: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[banner_user_info] ;
+      courses: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[banner_courses]
+      departments: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[banner_departments]
+      imports: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[banner_imports]
+      subjects: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[banner_subjects]
+      terms: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[banner_terms]
+      userinfo: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[banner_user_info]
     courseleaf:
-      courses: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[courseleaf_courses] ;
-      departments: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[courseleaf_departments] ;
-      roles: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[courseleaf_roles] ;
-      subjects: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[courseleaf_subjects] ;
-      users: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[courseleaf_users] ;
+      imports: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[courseleaf_imports]
+      roles: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[courseleaf_roles]
+      users: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[courseleaf_users]
     current:
-      courses: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[current_courses] ;
-      crosslists: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[current_crosslists] ;
-      departments: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[current_departments] ;
-      roles: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[current_roles] ;
-      subjects: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[current_subjects] ;
-      users: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[current_users] ;
-  stored_procedures:
-    deactivate_old_roles: EXEC [CourseLeaf_Contacts].[dbo].[deactivate_old_roles];
-    update_current_crosslists: EXEC [CourseLeaf_Contacts].[dbo].[update_current_crosslists];
+      courses: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[current_courses]
+      crosslists: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[current_crosslists]
+      departments: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[current_departments]
+      roles: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[current_roles]
+      subjects: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[current_subjects]
+      users: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[current_users]
+    powerbi:
+      crosslists: TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[powerbi_crosslists]
