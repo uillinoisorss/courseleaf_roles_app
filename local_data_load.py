@@ -92,10 +92,6 @@ def import_database_file() -> bool:
     Returns:
         bool: True if the database file exists in local storage after import, False otherwise.
     """
-    # TODO delete this after debugging, this clause is just to prevent having to re-import the database file
-    # every time I run the process while debugging.
-    if os.path.exists(LOCAL_PATH_TO_DB):
-        return True
 
     start = timer()
     try:
@@ -433,6 +429,25 @@ def execute_courseleaf_data_load():
     sp_query = QUERIES['reg']['stored_procedures']['deactivate_old_roles']
     qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, sp_query)
 
+def truncate_current_tables():
+    """Truncate current_ database tables that are intended to be completely refreshed with each new data load.
+    We aren't concerned with keeping point-in-time data available to the application for the following tables:
+        - current_crosslists (is already truncated in update-current_crosslists sp)
+        - current_departments
+        - current_subjects
+        - current_users
+    Rather than track begin and end dates for these "current" data elements, we just truncate these tables
+    before each data load so that only the most current information is displayed. Point-in-time data should
+    be re-constructable from the daily load tables, anyways.
+
+    I'm not satisfied with the way that this part of the application is designed, but I can't currently think
+    of a practical reason to make this part of the process more complicated than it already is. Might change
+    in the future, but for now, let's truncate!
+    """
+    for table in ['departments', 'subjects', 'users']:
+        truncate_query = QUERIES['reg']['truncate']['current'][table]
+        qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
+
 def truncate_database_tables():
     """Truncates all application database tables. Only to be used when resetting database for testing purposes.
     """
@@ -469,15 +484,12 @@ def main():
     # Always generate new query yaml first to capture any changes made to queries between loads
     QUERIES = qf.load_query_yaml('queries', QUERY_FILE_PATH)
 
-    # This will truncate all app database tables before proceeding with data load.
-    # For testing only!!! Remove this before running in production.
-    truncate_database_tables()
-
     # Bring in SQLite file from LeepFrog and confirm that it's accessible
     import_complete = import_database_file()
 
     # All of the ETL stuff happens here
     if import_complete:
+        truncate_current_tables()
         execute_banner_data_load()
         execute_courseleaf_data_load()
         build_powerbi_tables()
