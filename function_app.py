@@ -20,8 +20,6 @@ def courseleaf_roles_app_data_load(timer: func.TimerRequest) -> None:
 
 @app.route(route="courseleaf_data_load_test", auth_level=func.AuthLevel.ANONYMOUS)
 def courseleaf_data_load_test(req: func.HttpRequest) -> func.HttpResponse:
-    logger = logging.getLogger(__name__)
-    logging.basicConfig(filename = 'dev.log', encoding = 'utf-8', level = logging.DEBUG, format = '%(asctime)s %(levelname)s: %(message)s', datefmt = '%Y-%m-%d %H:%M:%S')
     try:
         cf.execute_data_load()
         return func.HttpResponse(f"Test data load completed successfully.")
