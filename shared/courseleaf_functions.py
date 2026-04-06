@@ -42,9 +42,9 @@ SFTP_PATH_TO_DB = XFERPROD_DATA_DIRECTORY + DB_FILE_NAME
 LOCAL_PATH_TO_DB = os.path.join(LOCAL_TEMP_DIRECTORY, DB_FILE_NAME)
 
 QUERY_FOLDER_PATH = str(os.getenv('QUERY_FOLDER_PATH')) # All SQL queries in this directory will be loaded into a .yaml file
-QUERY_FILE_PATH = str(os.getenv('QUERY_FILE_PATH')) # A .yaml file containing all queries in QUERY_FOLDER_PATH will be written at this path
+# QUERY_FILE_PATH = str(os.getenv('QUERY_FILE_PATH')) # A .yaml file containing all queries in QUERY_FOLDER_PATH will be written at this path
 
-QUERIES = qf.load_query_yaml(QUERY_FOLDER_PATH, QUERY_FILE_PATH)
+QUERIES = qf.load_queries(QUERY_FOLDER_PATH)
 
 # Logger setup
 logger = logging.getLogger(__name__)
