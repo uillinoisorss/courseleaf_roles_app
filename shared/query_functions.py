@@ -122,7 +122,6 @@ def make_dict_from_paths(paths):
             # Otherwise, individual queries will be referred to by the last chunk of their filename
             file_key = file.split('_')[-1]
 
-
         acc = tree_path # assign existing tree structure to acc
         for level, path_at_level in enumerate(levels, start = 1):
             # If we reach the last level in levels:
@@ -139,44 +138,31 @@ def make_dict_from_paths(paths):
 
     return tree_path
 
-def generate_query_yaml(query_dir, yaml_filename):
-    """Generates a .yaml file from a directory (and its subdirectories) of SQL Queries. 
-    Provides structured access to query contents in code without having to constantly open
-    new file streams. 
+# TODO include documentation about query directory structure in the project documentation,
+# whenever you're able to get around to that.
+def load_queries(query_dir, yaml_path = None):
+    """Creates a dictionary object associating a hierarchy of directories containing .sql files with
+    the queries contained in those files. Provides structured access to query contents in code without
+    having to constantly open new file streams or store long queries in-line with other code.
 
     Args:
-        query_dir (path): path to top-level directory containing .sql files.
-        yaml_filename (path): path including filename where .yaml output should be written to.
-    """
-    # TODO make yaml_filename optional and have the method return the dict as an object
-    # when yaml_filename is not passed, similar to how yaml.dump already works.
-
-    paths = get_paths(query_dir)
-    # Specify the 'queries' key to unwrap the highest level directory
-    dict = make_dict_from_paths(paths)['queries']
-    # Exclude the 'create_database' T-SQL file if it gets included in the dict
-    if 'database' in dict:
-        del dict['database']
-    with open(yaml_filename, 'w') as stream:
-        yaml.dump(dict, stream, width = float('inf')) # width = float('inf') ensures that whole queries get dumped to a single line
-        head, tail = os.path.split(yaml_filename) # head will be empty if the filename doesn't contain a path
-        if not head:
-            logging.info(f'Query file {tail} has been written to the active directory')
-        else:
-            logging.info(f'Query file {tail} has been written to {head}')
-
-def load_query_yaml(query_dir, yaml_filename):
-    """Calls generate_query_yaml, then loads the created file and returns its contents
-    as a dictionary.
-
-    Args:
-        query_dir (path): path to top-level directory containing .sql files.
-        yaml_filename (path): path including filename where .yaml output should be written to.
+        query_dir (path): path to structured directory where SQL queries are stored.
+        yaml_path (path, default None): if provided, a file will be written to yaml_path containing
+            the contents of query_dir as a .yaml file.
 
     Returns:
-        {str : str}: dictionary object containing text of SQL queries. 
+        dict: a nested dictionary of SQL queries. All keys and all values will be strings.  
     """
-    generate_query_yaml(query_dir, yaml_filename)
-    with open(yaml_filename) as query_file:
-        queries = yaml.safe_load(query_file)
-    return queries
+    paths = get_paths(query_dir)
+    query_dict = make_dict_from_paths(paths)['queries']
+    # If yaml_path is provided, write queries to a file at yaml_path
+    if yaml_path:
+        with open(yaml_path, 'w') as stream:
+            yaml.dump(query_dict, stream, width = float('inf')) # width = float('inf') ensures that whole queries get dumped to a single line
+            head, tail = os.path.split(yaml_path) # head will be empty if the filename doesn't contain a path
+            if not head:
+                logging.info(f'Query file {tail} has been written to the active directory.')
+            else:
+                logging.info(f'Query file {tail} has been written to {head}.')
+
+    return query_dict
