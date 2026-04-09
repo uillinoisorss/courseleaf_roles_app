@@ -30,7 +30,7 @@ REPTPROD_PASSWORD = str(os.getenv('REPTPROD_PASSWORD'))
 
 XFERPROD_HOSTNAME = str(os.getenv('XFERPROD_HOST'))
 XFERPROD_USERNAME = str(os.getenv('XFERPROD_USERNAME'))
-XFERPROD_PKEY = str(os.getenv('XFERPROD_PKEY'))
+XFERPROD_PKEY = str(os.getenv('XFERPROD_PKEY')).replace('|', '\n')
 
 DB_FILE_NAME = str(os.getenv('DB_FILE_NAME'))
 
