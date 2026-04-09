@@ -1,5 +1,6 @@
 import logging
 import os
+import platform
 import re
 
 import pyodbc
@@ -98,7 +99,7 @@ def make_dict_from_paths(paths):
         dict(str : str): a dictionary associating file paths to their content.
     """
     # TODO rewrite this method to be more generic or add more type checking and exceptions to make 
-    # sure that it doesn't crash if a none-sql file gets in there somehow.
+    # sure that it doesn't crash if a non-sql file gets in there somehow.
 
     # Sort so deepest paths are first
     paths = sorted(paths, key = lambda s: len(s.lstrip('\\').split('\\')), reverse = True)
@@ -107,8 +108,16 @@ def make_dict_from_paths(paths):
     for path in paths:
         query = strip_query(path, drop_semicolon = True, param_prefix = ':')
 
-        # Split into list and remove leading '/' if present
-        levels = path.lstrip('\\').split('\\')
+        # Windows paths use a backslash to delimit paths, and backslashes 
+        # need to be escaped with an extra backslash in Python
+        if platform.system() == "Windows":
+            path_delimiter = '\\'
+        # Assume all non-windows platforms use forward slashes
+        else:
+            path_delimiter = '/'
+
+        # Split into list and remove leading slash if present
+        levels = path.lstrip(path_delimiter).split(path_delimiter)
         
          # Get the last element in levels (the filename) and remove the file extension
         file = levels.pop()[:-4]
@@ -154,7 +163,18 @@ def load_queries(query_dir, yaml_path = None):
         dict: a nested dictionary of SQL queries. All keys and all values will be strings.  
     """
     paths = get_paths(query_dir)
-    query_dict = make_dict_from_paths(paths)['queries']
+    query_dict = make_dict_from_paths(paths)
+
+    # Workaround for stripping the top level directory keys off of the query dictionary, leaving
+    # just the levels under queries/ so that the dict structure is in line with expectations.
+    # This feels kinda hacky but also feels like the simplest solution to the key error issue
+    # that I keep getting when deploying to Azure.
+    if 'shared' in query_dict:
+        if 'queries' in query_dict['shared']:
+            query_dict = query_dict['shared']['queries']
+    elif 'shared/queries' in query_dict:
+        query_dict = query_dict['shared/queries']
+
     # If yaml_path is provided, write queries to a file at yaml_path
     if yaml_path:
         with open(yaml_path, 'w') as stream:
