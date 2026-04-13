@@ -20,9 +20,9 @@ import pyodbc
 # as it has parameters that get passed (I believe this is also the case for repeat parameters). Could probably
 # write some logic to make sure that this doesn't become a problem, but I'll save that for later.
 def extract_from_sql_server(server, user, password, query, parameters = None):
-    connection_string = f'DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={server};UID={user};PWD={password};TrustServerCertificate=yes;'
+    connection_string = f'DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={server};UID={user};PWD={password};Authentication=SqlPassword;TrustServerCertificate=yes;'
     try:
-        with pyodbc.connect(connection_string, trusted_connection = 'Yes') as connection:
+        with pyodbc.connect(connection_string) as connection:
             with connection.cursor() as cursor:
                 if parameters:
                     cursor.execute(query, parameters)
@@ -105,9 +105,9 @@ def parameterize_data_frame(df: pd.DataFrame):
 # generic use cases in the future.
 
 def insert_to_sql_server(server, user, password, query, parameters = None):
-    connection_string = f'DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={server};UID={user};PWD={password};TrustServerCertificate=yes;'
+    connection_string = f'DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={server};UID={user};PWD={password};Authentication=SqlPassword;TrustServerCertificate=yes;'
     try:
-        with pyodbc.connect(connection_string, trusted_connection = 'Yes') as connection:
+        with pyodbc.connect(connection_string) as connection:
             with connection.cursor() as cursor:
                 cursor.executemany(query, parameters)
     except Exception as e:

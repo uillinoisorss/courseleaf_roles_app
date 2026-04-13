@@ -22,9 +22,9 @@ def run_sql_server_query(server, user, password, query, parameters = None):
             then the query is exectuted as though it has no parameters, which can cause problems if the query
             actually does take parameters.
     """
-    connection_string = f'DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={server};UID={user};PWD={password};TrustServerCertificate=yes;'
+    connection_string = f'DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={server};UID={user};PWD={password};Authentication=SqlPassword;TrustServerCertificate=yes;'
     try:
-        with pyodbc.connect(connection_string, trusted_connection = 'Yes') as connection:
+        with pyodbc.connect(connection_string) as connection:
             with connection.cursor() as cursor:
                 if parameters:
                     cursor.execute(query, parameters)
