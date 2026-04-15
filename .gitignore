@@ -2,6 +2,7 @@
 *.code-workspace
 
 *.sqlite
+*.zip
 
 todo.txt
 test_queries/
