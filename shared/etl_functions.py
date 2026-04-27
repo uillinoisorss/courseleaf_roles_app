@@ -4,6 +4,7 @@ Currently implemented:
     - Oracle DB (extract)
     - SQLite (extract)
 """
+from datetime import datetime
 from itertools import groupby
 import logging
 import os
@@ -132,6 +133,28 @@ def json_to_dataframe(json):
 
 def query_results_to_dataframe(query_results, column_names):
     return pd.DataFrame.from_records(query_results, columns = column_names)
+
+def preprocess_dataframe(dataframe, load_id):
+    """A bunch of preprocessing steps that I was already doing for each part of the data
+    load anyways.
+        - Replaces missing values with empty strings
+        - Adds a "load_id" column
+        - Adds an "insert_timestamp" column
+        - Re-orders columns so that load_id is first and insert_timestamp is last.
+
+    Args:
+        dataframe (pandas.DataFrame): a pandas DataFrame.
+        load_id (int): load_id number, as retrieved by get_load_id, to be inserted into the table.
+
+    Returns:
+        pandas.DataFrame: preprocessed data.
+    """
+    columns = list(dataframe.columns)
+    output = dataframe.fillna('')
+    output['load_id'] = load_id
+    output['insert_timestamp'] = datetime.now()
+    output = output[['load_id'] + columns + ['insert_timestamp']]
+    return output
 
 def parameterize_data_frame(df: pd.DataFrame):
     """Converts rows of a DataFrame to a list of tuples ready to be used as parameters for a 
