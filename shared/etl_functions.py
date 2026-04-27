@@ -4,6 +4,7 @@ Currently implemented:
     - Oracle DB (extract)
     - SQLite (extract)
 """
+from itertools import groupby
 import logging
 import os
 import sqlite3 as sqlite
@@ -11,6 +12,7 @@ import sqlite3 as sqlite
 import oracledb
 import pandas as pd
 import pyodbc
+import requests
 
 ######################################################################################################
 # EXTRACT
@@ -40,7 +42,7 @@ def extract_from_sql_server(server, user, password, query, parameters = None):
 
 # oracledb can use both named and positional parameters; I use positional parameters here for consistency
 # with the SQL Server extract method. As above, some checks to ensure that the correct number of parameters
-# are called for, but I can take care of those later. Lots of fun for future me! 
+# get passed are called for, but I can take care of those later. Lots of fun for future me! 
 def extract_from_oracle(dsn, user, password, query, parameters = None):
     oracledb.init_oracle_client()
     try:
@@ -75,9 +77,58 @@ def extract_from_sqlite(path_to_db, query):
        logging.error(f'An exception was raised while querying SQLite database at {path_to_db}: {str(e)}')
     return return_data
 
+def get_api_data(url, username, password, parameters = {}):
+    """Wrapper function for retrieving data (in json format) from an API via HTTP.
+
+    Args:
+        url(str): the API url to send the request to.
+        username(str): username for API authentication.
+        password(str): password for API authentication.
+        parameters(dict, empty by default): dictionary of key/value pairs to be passed as parameters to the request.
+
+    Returns:
+        dict: HTTP response content in json format.
+    """
+    if parameters:
+        response = requests.get(url, auth = (username, password), params = parameters)
+    else:
+        response = requests.get(url, auth = (username, password))
+    return response.json()
+
 ######################################################################################################
 # TRANSFORM
 ######################################################################################################
+
+def json_to_dataframe(json):
+    """Convert an HTTP response (in json format) containing tabular data into a DataFrame.
+
+    Args:
+        json(dict): an HTTP response (from the requests module) in json format.
+
+    Returns:
+        pandas.DataFrame: a dataframe containing the response data.
+    """
+    rows = json['elements']
+    
+    # Confirm that all rows of response have the same key names
+    # (exclude hyperlinks that are included in the response, since they contain no relevant data)
+    all_keys = [[key for key in row.keys() if key != 'links'] for row in rows]
+    def all_equal(iterable):
+        """Determine whether all elements in an iterable are equal to one another
+        Borrowed from this Stack Overflow answer by user kennytm: https://stackoverflow.com/a/3844832/27800403
+        """
+        g = groupby(iterable)
+        return next(g, True) and not next(g, False)
+    if not all_equal(all_keys):
+        raise ValueError(f'Not all elements in json response have the same keys. Try confirming that the data in the response is actually tabular.')
+    
+    column_names = all_keys[0]
+    columns = {}
+    for column_name in column_names:
+        column_data = [row[column_name] for row in rows] # Get all data with same column name in single list
+        columns[column_name] = column_data
+    dataframe = pd.DataFrame.from_dict(columns)
+    return dataframe
 
 def query_results_to_dataframe(query_results, column_names):
     return pd.DataFrame.from_records(query_results, columns = column_names)
