@@ -541,12 +541,12 @@ BEGIN
 	DECLARE @DATE DATETIME2(7);
 	SET @DATE = GETDATE();
 
+	-- If the inserted course record is entirely new, add it to current_courses as-is
 	IF EXISTS (
 		SELECT
 			inserted.term,
 			inserted.course,
-			inserted.course_id,
-			inserted.course_effective_term
+			inserted.course_id
 		FROM
 			inserted
 		WHERE
@@ -554,15 +554,13 @@ BEGIN
 				SELECT
 					current_courses.term,
 					current_courses.course,
-					current_courses.course_id,
-					current_courses.course_effective_term
+					current_courses.course_id
 				FROM
 					current_courses
 				WHERE
 					current_courses.term = inserted.term
 					AND current_courses.course = inserted.course
 					AND current_courses.course_id = inserted.course_id
-					AND current_courses.course_effective_term = inserted.course_effective_term
 			)
 	)
 	BEGIN
@@ -607,16 +605,62 @@ BEGIN
 				SELECT
 					current_courses.term,
 					current_courses.course,
-					current_courses.course_id,
-					current_courses.course_effective_term
+					current_courses.course_id
 				FROM
 					current_courses
 				WHERE
 					current_courses.term = inserted.term
 					AND current_courses.course = inserted.course
 					AND current_courses.course_id = inserted.course_id
-					AND current_courses.course_effective_term = inserted.course_effective_term
 			)
+	END
+	-- If a course record would be inserted that has the same ID as a course that already exists
+	-- in the current_courses table, then we need to check whether the new record has an updated
+	-- course_effective_term. If it does, we just modify the existing record with the new
+	-- term information.
+	ELSE IF EXISTS (
+		SELECT
+			inserted.term,
+			inserted.course,
+			inserted.course_id
+		FROM
+			inserted
+		WHERE
+			EXISTS (
+				SELECT
+					current_courses.term,
+					current_courses.course,
+					current_courses.course_id
+				FROM
+					current_courses
+				WHERE
+					current_courses.term = inserted.term
+					AND current_courses.course = inserted.course
+					AND current_courses.course_id = inserted.course_id
+					AND current_courses.course_effective_term < inserted.course_effective_term
+			)
+	)
+	BEGIN
+		UPDATE
+			current_courses
+		SET
+			current_courses.course_start_term = inserted.course_start_term,
+			current_courses.course_end_term = inserted.course_end_term,
+			current_courses.course_effective_term = inserted.course_effective_term,
+			current_courses.modified_timestamp = @DATE
+		FROM
+			current_courses
+			JOIN inserted ON (
+				current_courses.term = inserted.term
+				AND current_courses.course = inserted.course
+				AND current_courses.course_id = inserted.course_id
+			)
+		WHERE
+			current_courses.term = inserted.term
+			AND current_courses.course = inserted.course
+			AND current_courses.course_id = inserted.course_id
+			AND current_courses.course_effective_term < inserted.course_effective_term
+		;
 	END
 END
 GO
