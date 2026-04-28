@@ -20,6 +20,10 @@ import shared.etl_functions as etl
 
 load_dotenv()
 
+DENODO_BASE_URL = str(os.getenv('DENODO_BASE_URL'))
+DENODO_USERNAME = str(os.getenv('DENODO_USERNAME'))
+DENODO_PASSWORD = str(os.getenv('DENODO_PASSWORD'))
+
 REG_HOSTNAME = str(os.getenv('REG_HOST'))
 REG_USERNAME = str(os.getenv('REG_USERNAME'))
 REG_PASSWORD = str(os.getenv('REG_PASSWORD'))
@@ -166,122 +170,59 @@ def get_current_terms():
     extract_query = QUERIES['reg']['select']['terms']['current']
     terms = etl.extract_from_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, extract_query)
     # Query results are a tuple wrapped in a list, so need to access the tuple from the list first.
-    return terms[0] 
+    return terms[0]
+
+def get_column_names(table_group: str, table: str):
+    """Retrieves column names, omitting the mostly-universal metadata columns (id, load_id, insert_timestamp).
+    Intended as a convenience to ensure proper ordering of data retrieved via API before insert to SQL Server.
+
+    Args:
+        table_group (str): name of the table group ('banner', 'courseleaf')
+        table (str): the identifying portion of the table name (what comes after the final _, for example, 'courses', 'departments', 'terms', etc.)
+
+    Returns:
+        list[str]: ordered list of column names
+    """
+    extract_query = QUERIES['reg']['select']['columns']
+    table_name = f'{table_group.lower()}_{table.lower()}'
+    column_names = etl.extract_from_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, extract_query, parameters = [table_name])
+    # Single-element rows still get returned as tuples, so need to unpack them first
+    column_names = [row[0] for row in column_names]
+    return column_names
     
 # BANNER ETL FUNCTIONS
-    
-def extract_and_load_banner_courses(load_id):
-    """Retrieve course data from Banner, transform results, and load to SQL Server.
-    This function queries Banner four times: once each for the current term, previous term, next term, 
-    and term after the next term (the next next term). This is the range of terms that will typically
-    be of interest to course schedulers.
-    """
-    terms = get_current_terms()
-    course_query = QUERIES['banner']['select']['courses']
-    load_query = QUERIES['reg']['insert']['banner']['courses']
-    for term in terms:
-        try:
-            courses = etl.extract_from_oracle(REPTPROD_HOSTNAME, REPTPROD_USERNAME, REPTPROD_PASSWORD, course_query, parameters = [term])
-        except Exception as e:
-            logger.error(f'BANNER_COURSES: {str(e)}')
-        columns = ['term', 'course', 'subject_code', 'course_no', 'course_title', 'college', 'dept_no', 'control_code', 'course_id', 'course_start_term', 'course_end_term', 'course_effective_term', 'status']
-        courses = etl.query_results_to_dataframe(courses, columns)
-        logger.info(f'BANNER_COURSES: Read {courses.shape[0]} rows from REPTPROD for term {term}.')
 
-        courses.fillna('', inplace = True)
-        courses['load_id'] = load_id
-        courses['insert_timestamp'] = datetime.now()
-        courses = courses[['load_id'] + columns + ['insert_timestamp']]
-        logger.info(f'BANNER_COURSES: Prepared {courses.shape[0]} rows for term {term} for load to SQL Server.')
-
-        load_data = etl.parameterize_data_frame(courses)
-        try:
-            etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
-            logger.info(f'BANNER_COURSES: Load to SQL Server for term {term} complete.')
-        except Exception as e:
-            logger.error(f'BANNER_COURSES: {str(e)}')
-
-def extract_and_load_banner_departments(load_id):
-    """Retrieve academic department data from Banner, transform results, and load to SQL Server.
-    """
-    extract_query = QUERIES['banner']['select']['departments']
+def extract_from_banner(table: str, params: dict = {}):
+    table_group = 'banner'
+    endpoint = f'/views/{table_group.lower()}_{table.lower()}'
+    url = DENODO_BASE_URL + endpoint
+    process_name = f'{table_group.upper()}_{table.upper()}'
     try:
-        departments = etl.extract_from_oracle(REPTPROD_HOSTNAME, REPTPROD_USERNAME, REPTPROD_PASSWORD, extract_query)
+        json = etl.get_api_data(url, DENODO_USERNAME, DENODO_PASSWORD, params)
+        data = etl.json_to_dataframe(json)
+        if params:
+            display_params = ';'.join([f'{key} : {params[key]}' for key in params])
+            logger.info(f'{process_name}: Read {data.shape[0]} rows from REPTPROD using parameters: {display_params}')
+        else:
+            logger.info(f'{process_name}: Read {data.shape[0]} rows from REPTPROD.')
     except Exception as e:
-        logger.error(f'BANNER_DEPARTMENTS: {str(e)}')
-    columns = ['dept_no', 'dept_name']
-    departments = etl.query_results_to_dataframe(departments, columns)
-    logger.info(f'BANNER_DEPARTMENTS: Read {departments.shape[0]} rows from REPTPROD.')
+        raise
+    return data
 
-    departments.fillna('', inplace = True)
-    departments['load_id'] = load_id
-    departments['insert_timestamp'] = datetime.now()
-    departments = departments[['load_id'] + columns + ['insert_timestamp']]
-    logger.info(f'BANNER_DEPARTMENTS: Prepared {departments.shape[0]} rows for load to SQL Server.')
-
-    load_query = QUERIES['reg']['insert']['banner']['departments']
-    load_data = etl.parameterize_data_frame(departments)
+def load_banner_data(data: pd.DataFrame, table: str):
+    table_group = 'banner'
+    process_name = f'{table_group.upper()}_{table.upper()}'
+    column_names = get_column_names(table_group, table)
+    load_id = get_load_id(table_group)
+    load_query = QUERIES['reg']['insert'][table_group][table]
+    preprocessed_data = etl.preprocess_dataframe(data, load_id, column_names)
+    logger.info(f'{process_name}: Prepared {preprocessed_data.shape[0]} rows for load to SQL Server.')
+    load_data = etl.parameterize_data_frame(preprocessed_data)
     try:
         etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
-        logger.info(f'BANNER_DEPARTMENTS: Load to SQL Server complete.')
+        logger.info(f'{process_name}: Load to SQL Server complete.')
     except Exception as e:
-        logger.error(f'BANNER_DEPARTMENTS: {str(e)}')
-
-def extract_and_load_banner_subjects(load_id):
-    """Retrieve subject area data from Banner, transform results, and load to SQL Server.
-    """
-    extract_query = QUERIES['banner']['select']['subjects']
-    try:
-        subjects = etl.extract_from_oracle(REPTPROD_HOSTNAME, REPTPROD_USERNAME, REPTPROD_PASSWORD, extract_query)
-    except Exception as e:
-        logger.error(f'BANNER_SUBJECTS: {str(e)}')
-    columns = ['subject_code', 'subject', 'subject_name_codebook']
-    subjects = etl.query_results_to_dataframe(subjects, columns)
-    logger.info(f'BANNER_SUBJECTS: Read {subjects.shape[0]} rows from REPTPROD.')
-
-    subjects.fillna('', inplace = True)
-    subjects['load_id'] = load_id
-    subjects['insert_timestamp'] = datetime.now()
-    subjects = subjects[['load_id'] + columns + ['insert_timestamp']]
-    logger.info(f'BANNER_SUBJECTS: Prepared {subjects.shape[0]} rows for load to SQL Server.')
-
-    load_query = QUERIES['reg']['insert']['banner']['subjects']
-    load_data = etl.parameterize_data_frame(subjects)
-    try:
-        etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
-        logger.info(f'BANNER_SUBJECTS: Load to SQL Server complete.')
-    except Exception as e:
-        logger.error(f'BANNER_SUBJECTS: {str(e)}')
-
-def extract_and_load_banner_terms(load_id):
-    """Retrieve academic term data from Banner, transform results, and load to SQL Server.
-    """
-    extract_query = QUERIES['banner']['select']['terms']
-    try:
-        terms = etl.extract_from_oracle(REPTPROD_HOSTNAME, REPTPROD_USERNAME, REPTPROD_PASSWORD, extract_query)
-    except Exception as e:
-        logger.error(f'BANNER_TERMS: {str(e)}')
-    columns = ['term_code', 'term_name_full', 'term_name', 'term_start_date', 'term_end_date']
-    terms = etl.query_results_to_dataframe(terms, columns)
-    logger.info(f'BANNER_TERMS: Read {terms.shape[0]} rows from REPTPROD.')
-
-    terms.fillna('', inplace = True)
-    terms['load_id'] = load_id
-    terms['insert_timestamp'] = datetime.now()
-    terms = terms[['load_id'] + columns + ['insert_timestamp']]
-    logger.info(f'BANNER_TERMS: Prepared {terms.shape[0]} rows for load to SQL Server.')
-
-    load_query = QUERIES['reg']['insert']['banner']['terms']
-    load_data = etl.parameterize_data_frame(terms)
-    try:
-        etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, load_query, load_data)
-        logger.info(f'BANNER_TERMS: Load to SQL Server complete.')
-    except Exception as e:
-        logger.error(f'BANNER_TERMS: {str(e)}')
-
-# TODO implement
-def extract_and_load_banner_userinfo(load_id):
-    logger.warning(f'BANNER_USERINFO: This query has not been implemented.')
+        raise
 
 # COURSELEAF ETL FUNCTIONS
 
@@ -389,14 +330,24 @@ def build_powerbi_tables():
 def execute_banner_data_load():
     """Triggers all Banner ETL functions in sequence.
     """
-    banner_load_id = insert_new_import_record('banner')
-
-    extract_and_load_banner_courses(banner_load_id)
-    extract_and_load_banner_departments(banner_load_id)
-    extract_and_load_banner_subjects(banner_load_id)
-    extract_and_load_banner_terms(banner_load_id)
-    extract_and_load_banner_userinfo(banner_load_id)
-
+    insert_new_import_record('banner')
+    tables = ['courses', 'departments', 'subjects', 'terms'] # need to figure out how to include userinfo later, might need to rename the table in SQL Server?
+    for table in tables:
+        # banner_courses table gets special treatment, both because the data has to be pulled for each term
+        # and because course data needs an extra processing step
+        if table == 'courses':
+            terms = get_current_terms()
+            for term in terms:
+                params = {'course_term' : term}
+                data = extract_from_banner(table, params)
+                # The term parameter for the Denodo view had to be something other than just 'term' since I'd already
+                # used that in creating the base views, so instead it's called 'course_term'. I change it back to
+                # just 'term' here for compatability with the SQL Server table.
+                data.rename(columns = {'course_term' : 'term'}, inplace = True)
+                load_banner_data(data, table)
+        else:
+            data = extract_from_banner(table)
+            load_banner_data(data, table)
     # Manually call SP to update crosslists table after course load is done:
     sp_query = QUERIES['reg']['stored_procedures']['update_current_crosslists']
     qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, sp_query)

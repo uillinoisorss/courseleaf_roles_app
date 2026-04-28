@@ -1,0 +1,14 @@
+SELECT 
+	COLUMN_NAME
+FROM 
+	CourseLeaf_Contacts.INFORMATION_SCHEMA.COLUMNS
+WHERE 
+	TABLE_NAME = ?
+	AND TABLE_CATALOG = 'CourseLeaf_Contacts'
+	AND TABLE_SCHEMA = 'dbo'
+	AND COLUMN_NAME <> 'id'
+	AND COLUMN_NAME <> 'load_id'
+	AND COLUMN_NAME <> 'insert_timestamp'
+ORDER BY
+	ORDINAL_POSITION
+;

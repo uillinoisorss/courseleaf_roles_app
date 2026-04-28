@@ -134,9 +134,10 @@ def json_to_dataframe(json):
 def query_results_to_dataframe(query_results, column_names):
     return pd.DataFrame.from_records(query_results, columns = column_names)
 
-def preprocess_dataframe(dataframe, load_id):
+def preprocess_dataframe(dataframe, load_id, column_names):
     """A bunch of preprocessing steps that I was already doing for each part of the data
     load anyways.
+        - Checks column names and re-orders columns where called for
         - Replaces missing values with empty strings
         - Adds a "load_id" column
         - Adds an "insert_timestamp" column
@@ -145,15 +146,26 @@ def preprocess_dataframe(dataframe, load_id):
     Args:
         dataframe (pandas.DataFrame): a pandas DataFrame.
         load_id (int): load_id number, as retrieved by get_load_id, to be inserted into the table.
+        column_names (list[str]): names of columns in dataframe before preprocessing, in intended order
 
     Returns:
         pandas.DataFrame: preprocessed data.
     """
     columns = list(dataframe.columns)
-    output = dataframe.fillna('')
+    # Just a little excessive data validation nothing to see here
+    if sorted(columns) != sorted(column_names):
+        if len(columns) > len(column_names):
+            error_message = 'The passed dataframe has more columns than column names specified.'
+        elif len(columns) < len(column_names):
+            error_message = 'The passed dataframe has fewer columns than column names specified.'
+        else:
+            error_message = 'The column names in the passed dataframe do not match the column names specified.'
+        raise ValueError(error_message)
+    output = dataframe[column_names]
+    output.fillna('', inplace = True)
     output['load_id'] = load_id
     output['insert_timestamp'] = datetime.now()
-    output = output[['load_id'] + columns + ['insert_timestamp']]
+    output = output[['load_id'] + column_names + ['insert_timestamp']]
     return output
 
 def parameterize_data_frame(df: pd.DataFrame):
