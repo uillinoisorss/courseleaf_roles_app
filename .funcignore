@@ -13,3 +13,4 @@ todo.txt
 *.sqlite
 *.zip
 database/
+old_code.py

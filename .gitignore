@@ -4,6 +4,7 @@
 *.sqlite
 *.zip
 
+old_code.py
 todo.txt
 test_queries/
 test.yaml
