@@ -1,15 +1,29 @@
 INSERT INTO
-    [CourseLeaf_Contacts].[dbo].[banner_user_info]
+    [CourseLeaf_Contacts].[dbo].[banner_userinfo]
     (
         load_id,
         uin,
-        last_name,
+        pidm,
         first_name,
-        email,
+        preferred_first_name,
+        middle_name,
+        last_name,
+        name_suffix,
+        email_address,
+        netid,
+        campus_domain,
+        max_activity_date
         insert_timestamp
     )
 VALUES
     (
+        ?,
+        ?,
+        ?,
+        ?,
+        ?,
+        ?,
+        ?,
         ?,
         ?,
         ?,
