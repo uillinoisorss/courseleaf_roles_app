@@ -331,7 +331,7 @@ def execute_banner_data_load():
     """Triggers all Banner ETL functions in sequence.
     """
     insert_new_import_record('banner')
-    tables = ['courses', 'departments', 'subjects', 'terms'] # need to figure out how to include userinfo later, might need to rename the table in SQL Server?
+    tables = ['courses', 'departments', 'subjects', 'terms', 'userinfo'] 
     for table in tables:
         # banner_courses table gets special treatment, both because the data has to be pulled for each term
         # and because course data needs an extra processing step
@@ -345,6 +345,16 @@ def execute_banner_data_load():
                 # just 'term' here for compatability with the SQL Server table.
                 data.rename(columns = {'course_term' : 'term'}, inplace = True)
                 load_banner_data(data, table)
+        # banner_userinfo also needs special handling to avoid loading the contact info for every single individual
+        # in Banner every night.
+        if table == 'userinfo':
+            extract_query = QUERIES['reg']['select']['courseleaf']['users']
+            user_uins = etl.extract_from_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, extract_query)
+            user_uins = [row[0] for row in user_uins]
+            data = extract_from_banner(table)
+            # Filter data to only include UINs present in the courseleaf_users table
+            data = data[data['uin'].isin(user_uins)]
+            load_banner_data(data, table)
         else:
             data = extract_from_banner(table)
             load_banner_data(data, table)
@@ -414,8 +424,8 @@ def execute_data_load():
     # All of the ETL stuff happens here
     if import_complete:
         truncate_current_tables()
+        execute_courseleaf_data_load() # CourseLeaf data needs to be loaded first so that the user list is current for the Banner data load
         execute_banner_data_load()
-        execute_courseleaf_data_load()
         build_powerbi_tables()
         logger.info('COURSELEAF_CONTACTS: Data load complete.')
     else:

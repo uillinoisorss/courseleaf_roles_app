@@ -83,16 +83,23 @@ CREATE TABLE [banner_terms] (
 )
 GO
 
-DROP TABLE IF EXISTS [banner_user_info];
+DROP TABLE IF EXISTS [banner_userinfo];
 GO
 
-CREATE TABLE [banner_user_info] (
+CREATE TABLE [banner_userinfo] (
   [id] int PRIMARY KEY IDENTITY(1, 1),
   [load_id] int,
   [uin] nvarchar(9),
-  [last_name] nvarchar(50),
+  [pidm] int,
   [first_name] nvarchar(50),
-  [email] nvarchar(50),
+  [preferred_first_name] nvarchar(50),
+  [middle_name] nvarchar(50),
+  [last_name] nvarchar(50),
+  [name_suffix] nvarchar(50),
+  [email_address] nvarchar(50),
+  [netid] nvarchar(50),
+  [campus_domain] nvarchar(50),
+  [max_activity_date] datetime2(7),
   [insert_timestamp] datetime2(7)
 )
 GO
@@ -855,7 +862,7 @@ DROP TRIGGER IF EXISTS [dbo].[update_current_users];
 GO
 
 CREATE TRIGGER [dbo].[update_current_users]
-ON [dbo].[courseleaf_users]
+ON [dbo].[banner_userinfo]
 AFTER INSERT
 NOT FOR REPLICATION
 AS
@@ -875,9 +882,15 @@ BEGIN
 		)
 	SELECT
 		inserted.uin,
-		inserted.last_name,
-		inserted.first_name,
-		inserted.email,
+		CASE
+			WHEN inserted.name_suffix IS NOT NULL AND inserted.name_suffix <> '' THEN CONCAT(inserted.last_name, ' ', inserted.name_suffix)
+			ELSE inserted.last_name
+		END,
+		CASE
+			WHEN inserted.preferred_first_name IS NOT NULL AND inserted.preferred_first_name <> '' THEN inserted.preferred_first_name
+			ELSE inserted.first_name
+		END,
+		inserted.email_address,
 		@DATE
 	FROM
 		inserted
