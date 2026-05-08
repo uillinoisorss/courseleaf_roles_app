@@ -29,7 +29,6 @@ def courseleaf_data_load_test(req: func.HttpRequest) -> func.HttpResponse:
 @app.route(route="courseleaf_debug", auth_level=func.AuthLevel.ANONYMOUS)
 def courseleaf_debug(req: func.HttpRequest) -> func.HttpResponse:
     try:
-        cf.truncate_database_tables()
         cf.execute_data_load()
         return func.HttpResponse(f"COURSELEAF_DEBUG: Success!")
     except Exception as e:
