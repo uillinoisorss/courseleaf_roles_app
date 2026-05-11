@@ -347,7 +347,7 @@ def execute_banner_data_load():
                 load_banner_data(data, table)
         # banner_userinfo also needs special handling to avoid loading the contact info for every single individual
         # in Banner every night.
-        if table == 'userinfo':
+        elif table == 'userinfo':
             extract_query = QUERIES['reg']['select']['courseleaf']['users']
             user_uins = etl.extract_from_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, extract_query)
             user_uins = [row[0] for row in user_uins]

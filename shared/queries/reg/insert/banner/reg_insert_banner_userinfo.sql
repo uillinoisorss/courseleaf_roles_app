@@ -12,7 +12,7 @@ INSERT INTO
         email_address,
         netid,
         campus_domain,
-        max_activity_date
+        max_activity_date,
         insert_timestamp
     )
 VALUES
