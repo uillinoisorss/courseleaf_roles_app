@@ -1,1 +1,1 @@
-TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[courseleaf_imports] ;
+TRUNCATE TABLE <DATABASE>.<SCHEMA>.[courseleaf_imports] ;

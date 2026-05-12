@@ -1,5 +1,5 @@
 INSERT INTO 
-    [CourseLeaf_Contacts].[dbo].[courseleaf_imports] (
+    <DATABASE>.<SCHEMA>.[courseleaf_imports] (
         load_timestamp
     )
 VALUES (

@@ -38,7 +38,8 @@ def run_sql_server_query(server, user, password, query, parameters = None):
 
 # Functions for creating SQL query YAML file
 
-def strip_query(path, drop_semicolon = False, param_prefix = None):
+# TODO update docstring with new args
+def prep_query(path, database_name = None, schema_name = None, drop_semicolon = False, param_prefix = None):
     """Prepares the contents of a .sql file to be inserted into a YAML file by removing contents and 
     replacing all whitespace with a single space, collapsing the query to a single line.
     Has optional parameters for configuring the final SQL string format.
@@ -59,14 +60,21 @@ def strip_query(path, drop_semicolon = False, param_prefix = None):
     except Exception as e:
         logging.error(f'An exception was raised while attempting to access the directory {path}: {str(e)}')
         raise
-    lines = [re.sub(r'--+.*', '', line) for line in lines]
+    lines = [re.sub(r'--+.*', '', line) for line in lines] # Removes comments of the -- variety
+    # TODO probably should also remove /* ... */ comments as well
     query = ''.join(lines)
+    # If database_name is specified, substitute it for database placeholder
+    if database_name:
+        query = re.sub(r'<DATABASE>', database_name, query)
+    # If schema_name is specified, substitute it for schema placeholder
+    if schema_name:
+        query = re.sub(r'<SCHEMA>', schema_name, query)
     if drop_semicolon:
         query = query.strip(';') # remove trailing semicolon (also leading, if there's one there for some reason)
     if param_prefix:
         # I could put a list of expected parameter prefix characters in this re but I'm kinda scared it'll affect queries elsewhere
         query = re.sub(r'[&]{1}', param_prefix, query)
-    return re.sub(r'\s+', ' ', query).strip()
+    return re.sub(r'\s+', ' ', query).strip() # finally, replace all whitespace (including newlines) with a single space
 
 def get_paths(parent):
     """Produces a list of relative filepaths for all files in any directory below parent.
@@ -85,7 +93,7 @@ def get_paths(parent):
             paths.append(os.path.join(root, file))
     return paths
 
-def make_dict_from_paths(paths):
+def make_dict_from_paths(paths, database_name, schema_name):
     """Convert a list of file paths into a nested dictionary of query strings.
     Code adapted from this SO post by user DarrylG: https://stackoverflow.com/a/66995788
 
@@ -106,7 +114,7 @@ def make_dict_from_paths(paths):
 
     tree_path = {}
     for path in paths:
-        query = strip_query(path, drop_semicolon = True, param_prefix = ':')
+        query = prep_query(path, database_name = database_name, schema_name = schema_name, drop_semicolon = True, param_prefix = ':')
 
         # Windows paths use a backslash to delimit paths, and backslashes 
         # need to be escaped with an extra backslash in Python
@@ -149,7 +157,10 @@ def make_dict_from_paths(paths):
 
 # TODO include documentation about query directory structure in the project documentation,
 # whenever you're able to get around to that.
-def load_queries(query_dir, yaml_path = None):
+
+# IMPORTANT: do not wrap database_name and schema_name in square brackets!!! This causes one
+# specific query to stop working.
+def load_queries(query_dir, database_name, schema_name, yaml_path = None):
     """Creates a dictionary object associating a hierarchy of directories containing .sql files with
     the queries contained in those files. Provides structured access to query contents in code without
     having to constantly open new file streams or store long queries in-line with other code.
@@ -163,7 +174,7 @@ def load_queries(query_dir, yaml_path = None):
         dict: a nested dictionary of SQL queries. All keys and all values will be strings.  
     """
     paths = get_paths(query_dir)
-    query_dict = make_dict_from_paths(paths)
+    query_dict = make_dict_from_paths(paths, database_name = database_name, schema_name = schema_name)
 
     # Workaround for stripping the top level directory keys off of the query dictionary, leaving
     # just the levels under queries/ so that the dict structure is in line with expectations.

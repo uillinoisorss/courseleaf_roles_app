@@ -1,1 +1,1 @@
-EXEC [CourseLeaf_Contacts].[dbo].[update_current_crosslists];
+EXEC <DATABASE>.<SCHEMA>.[update_current_crosslists];

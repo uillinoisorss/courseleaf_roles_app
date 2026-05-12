@@ -1,5 +1,5 @@
 INSERT INTO
-    [CourseLeaf_Contacts].[dbo].[banner_userinfo]
+    <DATABASE>.<SCHEMA>.[banner_userinfo]
     (
         load_id,
         uin,

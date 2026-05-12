@@ -1,1 +1,1 @@
-EXEC [CourseLeaf_Contacts].[dbo].[deactivate_old_roles];
+EXEC <DATABASE>.<SCHEMA>.[deactivate_old_roles];

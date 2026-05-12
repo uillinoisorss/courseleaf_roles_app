@@ -47,8 +47,11 @@ LOCAL_PATH_TO_DB = os.path.join(LOCAL_TEMP_DIRECTORY, DB_FILE_NAME)
 
 QUERY_FOLDER_PATH = str(os.getenv('QUERY_FOLDER_PATH')) # All SQL queries in this directory will be loaded into a .yaml file
 # QUERY_FILE_PATH = str(os.getenv('QUERY_FILE_PATH')) # A .yaml file containing all queries in QUERY_FOLDER_PATH will be written at this path
+QUERY_DB_NAME = str(os.getenv('QUERY_DB_NAME'))
+QUERY_SCHEMA_NAME = str(os.getenv('QUERY_SCHEMA_NAME'))
 
-QUERIES = qf.load_queries(QUERY_FOLDER_PATH)
+
+QUERIES = qf.load_queries(QUERY_FOLDER_PATH, database_name = QUERY_DB_NAME, schema_name = QUERY_SCHEMA_NAME)
 
 # Logger setup
 logger = logging.getLogger(__name__)

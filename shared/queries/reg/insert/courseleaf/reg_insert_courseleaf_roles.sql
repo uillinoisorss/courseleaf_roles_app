@@ -1,5 +1,5 @@
 INSERT INTO 
-    [CourseLeaf_Contacts].[dbo].[courseleaf_roles] (
+    <DATABASE>.<SCHEMA>.[courseleaf_roles] (
         load_id,
         role,
         dept_no,

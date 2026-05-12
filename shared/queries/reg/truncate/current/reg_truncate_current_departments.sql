@@ -1,1 +1,1 @@
-TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[current_departments] ;
+TRUNCATE TABLE <DATABASE>.<SCHEMA>.[current_departments] ;

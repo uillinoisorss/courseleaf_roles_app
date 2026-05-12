@@ -1,5 +1,5 @@
 INSERT INTO
-    [CourseLeaf_Contacts].[dbo].[banner_subjects]
+    <DATABASE>.<SCHEMA>.[banner_subjects]
     (
         load_id,
         subject_code,

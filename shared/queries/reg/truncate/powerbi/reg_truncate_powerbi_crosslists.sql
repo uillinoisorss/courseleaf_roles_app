@@ -1,1 +1,1 @@
-TRUNCATE TABLE [CourseLeaf_Contacts].[dbo].[powerbi_crosslists] ;
+TRUNCATE TABLE <DATABASE>.<SCHEMA>.[powerbi_crosslists] ;

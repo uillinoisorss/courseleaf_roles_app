@@ -1,1 +1,1 @@
-EXEC [CourseLeaf_Contacts].[dbo].[generate_powerbi_crosslists];
+EXEC <DATABASE>.<SCHEMA>.[generate_powerbi_crosslists];

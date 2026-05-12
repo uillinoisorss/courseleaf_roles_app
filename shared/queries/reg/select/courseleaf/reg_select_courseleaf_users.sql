@@ -1,7 +1,7 @@
 SELECT
 	uin
 FROM
-	[CourseLeaf_Contacts].[dbo].[courseleaf_users]
+	<DATABASE>.<SCHEMA>.[courseleaf_users]
 WHERE
 	load_id = (
 		SELECT
