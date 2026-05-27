@@ -1,1 +1,0 @@
-TRUNCATE TABLE <DATABASE>.<SCHEMA>.[courseleaf_imports] ;

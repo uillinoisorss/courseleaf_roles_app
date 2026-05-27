@@ -1,0 +1,1 @@
+TRUNCATE TABLE <DATABASE>.<SCHEMA>.[current_terms] ;

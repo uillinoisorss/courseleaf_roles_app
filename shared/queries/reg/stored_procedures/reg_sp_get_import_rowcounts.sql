@@ -1,0 +1,1 @@
+EXEC <DATABASE>.<SCHEMA>.[get_import_rowcounts];

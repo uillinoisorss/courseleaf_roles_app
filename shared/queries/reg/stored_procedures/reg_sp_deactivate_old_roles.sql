@@ -1,1 +1,0 @@
-EXEC <DATABASE>.<SCHEMA>.[deactivate_old_roles];

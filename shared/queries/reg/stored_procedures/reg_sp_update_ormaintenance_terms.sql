@@ -1,0 +1,1 @@
+EXEC <DATABASE>.<SCHEMA>.[update_ormaintenance_terms];

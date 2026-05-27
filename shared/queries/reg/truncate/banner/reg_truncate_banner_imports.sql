@@ -1,1 +1,0 @@
-TRUNCATE TABLE <DATABASE>.<SCHEMA>.[banner_imports] ;
