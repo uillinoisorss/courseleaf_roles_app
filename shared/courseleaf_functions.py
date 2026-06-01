@@ -110,58 +110,32 @@ def import_database_file() -> bool:
 
     return os.path.exists(LOCAL_PATH_TO_DB)
 
-def get_load_id(table_group):
-    """Get the current load id number for the specified table group. Data loads in the CourseLeaf database 
-    are centrally tracked in the _imports tables, which allows all of the data that is loaded at one time 
-    to be associated with a single numeric identifier. This query looks at the _imports table for specified 
-    table group and finds the maximum existing load_id. This value is then passed to the remaining load functions.
-
-    Args:
-        table_group (str): the name of the table group for which to retrieve the load id. Right now,
-            the valid table groups are "banner" and "courseleaf".
+def get_load_id():
+    """Get the current load id number. Data loads in the CourseLeaf database are centrally tracked in the imports tables, 
+    which allows all of the data that is loaded at one time to be associated with a single numeric identifier. This query 
+    looks at the imports table and finds the maximum existing load_id. This value is then passed to the remaining load functions.
 
     Returns:
-        int: current load id for specified table group. If the _imports table for that table group is empty, 
-        the value 0 will be returned. If there is an error while querying the database, -1 will be returned.
+        int: current max load id. If the imports table for that table group is empty, the value 0 will be returned.
     """
-    extract_query = QUERIES['reg']['select']['loadid'][table_group]
-    try:
-        # need to unpack the value that is retrieved by this query
-        load_id = etl.extract_from_sql_server(server = REG_HOSTNAME, user = REG_USERNAME, password = REG_PASSWORD, query = extract_query)[0][0]
-        logger.info(f'Next load_id for {table_group} tables is {load_id}.')
-        return load_id
-    except Exception as e:
-        logger.error(f'An exception was raised while connecting to {str(REG_HOSTNAME)}: {str(e)}')
-        return -1
+    extract_query = QUERIES['reg']['select']['loadid']
+    # need to unpack the value that is retrieved by this query
+    load_id = etl.extract_from_sql_server(server = REG_HOSTNAME, user = REG_USERNAME, password = REG_PASSWORD, query = extract_query)[0][0]
+    return load_id
     
-def insert_new_import_record(table_group):
-    """Insert a row into the _imports table for a table group, generating a new load_id which is returned
-    by the function.
-
-    I forgot that load_id is identity in the _imports table, lmao
-
-    Args:
-        table_group (str): the name of the table group for which to insert an import record. 
-        Right now, the valid table groups are "banner" and "courseleaf".
+def insert_new_import_record():
+    """Insert a row into the imports table, generating a new load_id which is returned.
 
     Returns:
         int: the load_id associated with this import record. See get_next_load_id for details. Returns -1
             if something goes wrong; 0 if the _imports table is empty; otherwise will return a positive integer.
     """
-    try:
-        # Create a new import record
-        insert_query = QUERIES['reg']['insert'][table_group]['imports']
-        load_timestamp = datetime.now()
-        params = etl.parameterize_data_frame(pd.DataFrame(data = {'load_timestamp' : [datetime.now()]}))
-        etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, insert_query, parameters = params)
-        # Get the new load_id to pass to the remaining functions
-        load_id = get_load_id(table_group)
-        logger.info(f'A {table_group} import record with load_id = {load_id} was inserted at {load_timestamp}')
-    except Exception as e:
-        logger.error(f'Unable to get new load_id for {table_group} tables: an exception was raised while connecting to {str(REG_HOSTNAME)}: {str(e)}')
-        # should this raise the exception instead of returning a value? TODO figure this out later
-        return -1
-
+    insert_query = QUERIES['reg']['insert']['imports']
+    load_timestamp = datetime.now()
+    params = etl.parameterize_data_frame(pd.DataFrame(data = {'load_timestamp' : [datetime.now()]}))
+    etl.insert_to_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, insert_query, parameters = params)
+    load_id = get_load_id()
+    logger.info(f'An import record with load_id = {load_id} was inserted at {load_timestamp}')
     return load_id
 
 def get_current_terms():
@@ -195,6 +169,7 @@ def get_column_names(table_group: str, table: str):
     
 # BANNER ETL FUNCTIONS
 
+# TODO docstring
 def extract_from_banner(table: str, params: dict = {}):
     table_group = 'banner'
     endpoint = f'/views/{table_group.lower()}_{table.lower()}'
@@ -212,11 +187,12 @@ def extract_from_banner(table: str, params: dict = {}):
         raise
     return data
 
+# TODO docstring
 def load_banner_data(data: pd.DataFrame, table: str):
     table_group = 'banner'
     process_name = f'{table_group.upper()}_{table.upper()}'
     column_names = get_column_names(table_group, table)
-    load_id = get_load_id(table_group)
+    load_id = get_load_id()
     load_query = QUERIES['reg']['insert'][table_group][table]
     preprocessed_data = etl.preprocess_dataframe(data, load_id, column_names)
     logger.info(f'{process_name}: Prepared {preprocessed_data.shape[0]} rows for load to SQL Server.')
@@ -227,9 +203,41 @@ def load_banner_data(data: pd.DataFrame, table: str):
     except Exception as e:
         raise
 
+def execute_banner_data_load():
+    """Triggers all Banner ETL functions in sequence.
+    """
+    tables = ['courses', 'departments', 'subjects', 'terms', 'userinfo']
+    for table in tables:
+        # banner_courses table gets special treatment, both because the data has to be pulled for each term
+        # and because course data needs an extra processing step
+        if table == 'courses':
+            terms = get_current_terms()
+            for term in terms:
+                params = {'course_term' : term}
+                data = extract_from_banner(table, params)
+                # The term parameter for the Denodo view had to be something other than just 'term' since I'd already
+                # used that in creating the base views, so instead it's called 'course_term'. I change it back to
+                # just 'term' here for compatability with the SQL Server table.
+                data.rename(columns = {'course_term' : 'term'}, inplace = True)
+                load_banner_data(data, table)
+        # banner_userinfo also needs special handling to avoid loading the contact info for every single individual
+        # in Banner every night.
+        elif table == 'userinfo':
+            extract_query = QUERIES['reg']['select']['courseleaf']['users']
+            user_uins = etl.extract_from_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, extract_query)
+            user_uins = [row[0] for row in user_uins]
+            data = extract_from_banner(table)
+            # Filter data to only include UINs present in the courseleaf_users table
+            # TODO might be wise to log UINs that don't have email addresses somewhere
+            data = data[data['uin'].isin(user_uins)]
+            load_banner_data(data, table)
+        else:
+            data = extract_from_banner(table)
+            load_banner_data(data, table)
+
 # COURSELEAF ETL FUNCTIONS
 
-def extract_and_load_courseleaf_roles(load_id):
+def extract_and_load_courseleaf_roles():
     """Retrieve role membership data from CourseLeaf database file, transform results, and load to SQL Server.
 
     Because I'm using a query provided by Leepfrog to get the role membership information (because it's structured
@@ -243,6 +251,7 @@ def extract_and_load_courseleaf_roles(load_id):
         extract_results = etl.extract_from_sqlite(LOCAL_PATH_TO_DB, extract_query)
     except Exception as e:
         logger.error(str(e))
+        raise
     roles = etl.query_results_to_dataframe(extract_results, ['role', 'members', 'email'])
     logger.info(f'COURSELEAF_ROLES: Read {roles.shape[0]} rows from SQLite database.')
 
@@ -278,6 +287,7 @@ def extract_and_load_courseleaf_roles(load_id):
     # as the index since that's now the primary key value in our dataset.
     roles = roles.join(members)
     roles.reset_index(inplace = True)
+    load_id = get_load_id()
     roles['load_id'] = load_id
     roles['insert_timestamp'] = datetime.now()
     roles = roles[['load_id', 'role', 'dept_no', 'dept', 'role_title', 'uin', 'insert_timestamp']]
@@ -292,8 +302,10 @@ def extract_and_load_courseleaf_roles(load_id):
         logger.info(f'COURSELEAF_ROLES: Load to SQL Server complete.')
     except Exception as e:
         logger.error(str(e))
+    sp_query = QUERIES['reg']['stored_procedures']['update_current_roles']
+    qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, sp_query)
 
-def extract_and_load_courseleaf_users(load_id):
+def extract_and_load_courseleaf_users():
     """Retrieve user identity data from CourseLeaf database file, transform results, and load to SQL Server.
     """
     extract_query = QUERIES['courseleaf']['select']['users']
@@ -306,6 +318,7 @@ def extract_and_load_courseleaf_users(load_id):
     logger.info(f'COURSELEAF_USERS: Read {users.shape[0]} rows from SQLite database.')
 
     users.fillna('', inplace = True)
+    load_id = get_load_id()
     users['load_id'] = load_id
     users['insert_timestamp'] = datetime.now()
     users = users[['load_id'] + columns + ['insert_timestamp']]
@@ -319,96 +332,38 @@ def extract_and_load_courseleaf_users(load_id):
     except Exception as e:
         logger.error(f'COURSELEAF_USERS: {str(e)}')
 
-# POWERBI ETL FUNCTIONS
-
-def build_powerbi_tables():
-    """Calls a stored procedure to create/update the special reference table that Power BI 
-    needs to properly display all courses in the same crosslist group.
-    """
-    sp_query = QUERIES['reg']['stored_procedures']['generate_powerbi_crosslists']
-    qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, sp_query)
-
-# AGGREGATE FUNCTIONS
-
-def execute_banner_data_load():
-    """Triggers all Banner ETL functions in sequence.
-    """
-    insert_new_import_record('banner')
-    tables = ['courses', 'departments', 'subjects', 'terms', 'userinfo'] 
-    for table in tables:
-        # banner_courses table gets special treatment, both because the data has to be pulled for each term
-        # and because course data needs an extra processing step
-        if table == 'courses':
-            terms = get_current_terms()
-            for term in terms:
-                params = {'course_term' : term}
-                data = extract_from_banner(table, params)
-                # The term parameter for the Denodo view had to be something other than just 'term' since I'd already
-                # used that in creating the base views, so instead it's called 'course_term'. I change it back to
-                # just 'term' here for compatability with the SQL Server table.
-                data.rename(columns = {'course_term' : 'term'}, inplace = True)
-                load_banner_data(data, table)
-        # banner_userinfo also needs special handling to avoid loading the contact info for every single individual
-        # in Banner every night.
-        elif table == 'userinfo':
-            extract_query = QUERIES['reg']['select']['courseleaf']['users']
-            user_uins = etl.extract_from_sql_server(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, extract_query)
-            user_uins = [row[0] for row in user_uins]
-            data = extract_from_banner(table)
-            # Filter data to only include UINs present in the courseleaf_users table
-            data = data[data['uin'].isin(user_uins)]
-            load_banner_data(data, table)
-        else:
-            data = extract_from_banner(table)
-            load_banner_data(data, table)
-    # Manually call SP to update crosslists table after course load is done:
-    sp_query = QUERIES['reg']['stored_procedures']['update_current_crosslists']
-    qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, sp_query)
-
 def execute_courseleaf_data_load():
     """Triggers all CourseLeaf ETL functions in sequence.
     """
-    courseleaf_load_id = insert_new_import_record('courseleaf')
+    extract_and_load_courseleaf_roles()
+    extract_and_load_courseleaf_users()
 
-    extract_and_load_courseleaf_roles(courseleaf_load_id)
-    extract_and_load_courseleaf_users(courseleaf_load_id)
+# AGGREGATE FUNCTIONS
 
-    # Manually call SP to end old roles where called for:
-    sp_query = QUERIES['reg']['stored_procedures']['deactivate_old_roles']
-    qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, sp_query)
-
-def truncate_current_tables():
-    """Truncate current_ database tables that are intended to be completely refreshed with each new data load.
-    We aren't concerned with keeping point-in-time data available to the application for the following tables:
-        - current_crosslists (is already truncated in update-current_crosslists sp)
-        - current_departments
-        - current_subjects
-        - current_users
-    Rather than track begin and end dates for these "current" data elements, we just truncate these tables
-    before each data load so that only the most current information is displayed. Point-in-time data should
-    be re-constructable from the daily load tables, anyways.
-
-    I'm not satisfied with the way that this part of the application is designed, but I can't currently think
-    of a practical reason to make this part of the process more complicated than it already is. Might change
-    in the future, but for now, let's truncate!
+def update_current_tables():
+    """Executes stored procedures that copy data from load tables to current tables.
     """
-    for table in ['departments', 'subjects', 'users']:
-        truncate_query = QUERIES['reg']['truncate']['current'][table]
-        qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query) 
+    stored_procedures = ['get_import_rowcounts', 'update_current_courses', 'update_current_crosslists',
+                         'update_current_departments', 'update_current_roles', 'update_current_subjects', 
+                         'update_current_terms', 'update_current_users', 'generate_powerbi_crosslists', 
+                         'update_ormaintenance_terms']
+    for proc_name in stored_procedures:
+        sp_query = QUERIES['reg']['stored_procedures'][proc_name]
+        qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, sp_query)
 
 def truncate_database_tables():
     """Truncates all application database tables. Only to be used when resetting database for testing purposes.
     """
     # Banner
-    for table in ['courses', 'departments', 'imports', 'subjects', 'terms', 'userinfo']:
+    for table in ['courses', 'departments', 'subjects', 'terms', 'userinfo']:
         truncate_query = QUERIES['reg']['truncate']['banner'][table]
         qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
     # Courseleaf
-    for table in ['imports', 'roles', 'users']:
+    for table in ['roles', 'users']:
         truncate_query = QUERIES['reg']['truncate']['courseleaf'][table]
         qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
     # Current
-    for table in ['courses', 'crosslists', 'departments', 'roles', 'subjects', 'users']:
+    for table in ['courses', 'crosslists', 'departments', 'imports', 'roles', 'subjects', 'terms', 'users']:
         truncate_query = QUERIES['reg']['truncate']['current'][table]
         qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, truncate_query)
     # Power BI
@@ -426,10 +381,13 @@ def execute_data_load():
 
     # All of the ETL stuff happens here
     if import_complete:
-        truncate_current_tables()
-        execute_courseleaf_data_load() # CourseLeaf data needs to be loaded first so that the user list is current for the Banner data load
-        execute_banner_data_load()
-        build_powerbi_tables()
-        logger.info('COURSELEAF_CONTACTS: Data load complete.')
+        try:
+            insert_new_import_record()
+            execute_courseleaf_data_load() # CourseLeaf data needs to be loaded first so that the user list is current for the Banner data load
+            execute_banner_data_load()
+            update_current_tables()
+            logger.info('COURSELEAF_CONTACTS: Data load complete.')
+        except Exception as e:
+            logger.error(f'COURSELEAF_CONTACTS: An error occurred during the data load process: {e}')
     else:
         logger.error('COURSELEAF_CONTACTS: The CourseLeaf database file was not found. Aborting data load.')

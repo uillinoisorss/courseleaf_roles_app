@@ -1073,9 +1073,6 @@ BEGIN
 	;
 
 	-- Update any user info that has changed.
-	-- This has an unintended side-effect of marking anyone with a name suffix or preferred first name as modified on initial insert.
-	-- There's probably a way to work around this, but it shouldn't cause any problems so I'm ignoring it for now.
-	-- Maybe using XOR? Somehow?
 	UPDATE
 		current_users
 	SET
@@ -1098,8 +1095,15 @@ BEGIN
 	WHERE
 		current_users.uin = banner_userinfo.uin
 		AND (
-			(current_users.first_name <> banner_userinfo.first_name OR current_users.first_name <> banner_userinfo.preferred_first_name)
-			OR (current_users.last_name <> banner_userinfo.last_name OR current_users.last_name <> CONCAT(banner_userinfo.last_name, ' ', banner_userinfo.name_suffix))
+			-- First name has changed, no preferred name
+			(current_users.first_name <> banner_userinfo.first_name AND (banner_userinfo.preferred_first_name IS NULL OR banner_userinfo.preferred_first_name = ''))
+			-- Preferred name has changed
+			OR (current_users.first_name <> banner_userinfo.preferred_first_name AND (banner_userinfo.preferred_first_name IS NOT NULL AND banner_userinfo.preferred_first_name <> ''))
+			-- Last name has changed, no suffix
+			OR (current_users.last_name <> banner_userinfo.last_name AND (banner_userinfo.name_suffix IS NULL OR banner_userinfo.name_suffix = '')) 
+			-- Last name has changed, with suffix
+			OR (current_users.last_name <> CONCAT(banner_userinfo.last_name, ' ', banner_userinfo.name_suffix) AND (banner_userinfo.name_suffix IS NOT NULL AND banner_userinfo.name_suffix <> ''))
+			-- Email has changed
 			OR current_users.email <> banner_userinfo.email_address
 		)
 		AND banner_userinfo.load_id = @LOADID

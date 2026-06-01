@@ -1,6 +1,8 @@
 .vscode
 *.code-workspace
 
+database/powerbi_demo_data/
+
 *.sqlite
 *.zip
 
