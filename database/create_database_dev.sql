@@ -215,12 +215,6 @@ CREATE TABLE [current_roles] (
 )
 GO
 
--- Unsure whether index is necessary
-
---CREATE UNIQUE INDEX current_roles_index
---ON current_roles (uin, role, sequence_number);
---GO
-
 DROP TABLE IF EXISTS [current_subjects];
 GO
 
@@ -287,6 +281,23 @@ CREATE TABLE [powerbi_crosslists] (
   [courses_in_group] nvarchar(50),
   [is_controlling] nvarchar(1),
   [is_crosslisted] nvarchar(1)
+)
+GO
+
+DROP TABLE IF EXISTS [powerbi_roles];
+GO
+
+CREATE TABLE [powerbi_roles] (
+  [id] int PRIMARY KEY IDENTITY(1, 1),
+  [term] nvarchar(6),
+  [role] nvarchar(50),
+  [dept_no] nvarchar(4),
+  [uin] nvarchar(9),
+  [first_name] nvarchar(255),
+  [last_name] nvarchar(255),
+  [email] nvarchar(255),
+  [role_end_date] nvarchar(30),
+  [department_name] nvarchar(255)
 )
 GO
 
@@ -403,6 +414,119 @@ BEGIN
 END
 GO
 
+-- Produces a table of role membership data specially formatted to appease the Power BI data model.
+CREATE OR ALTER PROCEDURE generate_powerbi_roles
+AS
+BEGIN
+	SET NOCOUNT ON;
+
+	TRUNCATE TABLE powerbi_roles;
+
+	-- Get active terms in a single column, then get term start & end dates
+	CREATE TABLE #terms (
+		term nvarchar(6),
+		term_start_date date,
+		term_end_date date
+	);
+	INSERT INTO 
+		#terms (term)
+	VALUES
+		((SELECT MAX(next_next_term) FROM ormaintenance_terms)),
+		((SELECT MAX(next_term) FROM ormaintenance_terms)),
+		((SELECT MAX(current_term) FROM ormaintenance_terms)),
+		((SELECT MAX(previous_term) FROM ormaintenance_terms))
+	;
+	UPDATE
+		#terms
+	SET
+		term_start_date = CAST(current_terms.term_start_date AS date),
+		term_end_date = CAST(current_terms.term_end_date AS date) 
+	FROM
+		current_terms
+	WHERE
+		term = current_terms.term_code
+	;
+
+	SELECT
+		terms.term,
+		current_roles.uin,
+		current_roles.role,
+		current_roles.role_title,
+		current_roles.dept_no,
+		current_roles.sequence_number,
+		terms.term_start_date,
+		current_roles.role_begin_date,
+		terms.term_end_date,
+		current_roles.role_end_date,
+		CASE
+			WHEN (
+				current_roles.role_begin_date <= terms.term_end_date
+				AND (
+					(
+					current_roles.role_end_date IS NULL
+					AND current_roles.sequence_number = (
+						SELECT
+							MAX(max_role.sequence_number)
+						FROM
+							current_roles max_role
+						WHERE
+							max_role.uin = current_roles.uin
+							AND max_role.role = current_roles.role
+					)
+					OR
+					(
+					current_roles.role_end_date >= terms.term_start_date
+					)
+				)
+				)
+			) THEN 'Y'
+			ELSE 'N'
+		END AS display_for_term
+	INTO
+		#role_control_data
+	FROM
+		#terms terms
+		CROSS JOIN current_roles
+	;
+
+	INSERT INTO
+		powerbi_roles (
+			term,
+			role,
+			dept_no,
+			uin,
+			first_name,
+			last_name,
+			email,
+			role_end_date,
+			department_name
+		)
+	SELECT
+		role_control.term,
+		role_control.role,
+		role_control.dept_no,
+		role_control.uin,
+		current_users.first_name,
+		current_users.last_name,
+		current_users.email,
+		role_control.role_end_date,
+		current_departments.dept_name
+	FROM
+		#role_control_data role_control
+		JOIN current_users ON role_control.uin = current_users.uin
+		JOIN current_departments ON role_control.dept_no = current_departments.dept_no
+	WHERE
+		role_control.display_for_term = 'Y'
+		AND role_control.role_title = 'Head'
+	ORDER BY
+		role,
+		term,
+		last_name,
+		first_name
+	;
+END
+GO
+
 -- Calculate rows inserted from most recent import and record those counts in the imports table.
 CREATE OR ALTER PROCEDURE get_import_rowcounts
 AS
@@ -429,7 +553,7 @@ BEGIN
 END
 GO
 
--- Update the current_courses table with information from most recent Banner import.
+-- Update the current_courses table with information from most recent import.
 CREATE OR ALTER PROCEDURE update_current_courses
 AS
 BEGIN
@@ -616,7 +740,7 @@ BEGIN
 END
 GO
 
--- Update the current_departments table with information from most recent Banner import.
+-- Update the current_departments table with information from most recent import.
 CREATE OR ALTER PROCEDURE update_current_departments
 AS
 BEGIN
@@ -700,7 +824,7 @@ BEGIN
 END
 GO
 
--- Update the current_roles table with information from most recent CourseLeaf import.
+-- Update the current_roles table with information from most recent import.
 CREATE OR ALTER PROCEDURE update_current_roles
 AS
 BEGIN
@@ -866,6 +990,7 @@ BEGIN
 END
 GO
 
+-- Update the current_subjects table with information from most recent import.
 CREATE OR ALTER PROCEDURE update_current_subjects
 AS
 BEGIN
@@ -887,7 +1012,7 @@ BEGIN
 			subject_name_codebook,
 			insert_timestamp
 		)
-	SELECT
+	SELECT DISTINCT
 		banner_subjects.subject_code,
 		banner_subjects.subject,
 		banner_subjects.subject_name_codebook,
@@ -953,6 +1078,7 @@ BEGIN
 END
 GO
 
+-- Update the current_terms table with information from most recent import.
 CREATE OR ALTER PROCEDURE update_current_terms
 AS
 BEGIN
@@ -1020,6 +1146,7 @@ BEGIN
 END
 GO
 
+-- Update the current_users table with information from most recent import.
 CREATE OR ALTER PROCEDURE update_current_users
 AS
 BEGIN

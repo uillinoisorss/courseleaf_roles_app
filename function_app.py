@@ -17,11 +17,11 @@ def courseleaf_roles_app_data_load(timer: func.TimerRequest) -> None:
     cf.execute_data_load()
 
 
-@app.route(route="courseleaf_data_load_test", auth_level=func.AuthLevel.ANONYMOUS)
-def courseleaf_data_load_test(req: func.HttpRequest) -> func.HttpResponse:
+@app.route(route="courseleaf_manual_data_load", auth_level=func.AuthLevel.ANONYMOUS)
+def courseleaf_manual_data_load(req: func.HttpRequest) -> func.HttpResponse:
     try:
         cf.execute_data_load()
-        return func.HttpResponse(f"COURSELEAF_CONTACTS: Test data load completed successfully.")
+        return func.HttpResponse(f"COURSELEAF_CONTACTS: Manual data load completed successfully.")
     except Exception as e:
         return func.HttpResponse(f"COURSELEAF_CONTACTS: Something went wrong! {print(e)}")
 
@@ -29,7 +29,6 @@ def courseleaf_data_load_test(req: func.HttpRequest) -> func.HttpResponse:
 @app.route(route="courseleaf_debug", auth_level=func.AuthLevel.ANONYMOUS)
 def courseleaf_debug(req: func.HttpRequest) -> func.HttpResponse:
     try:
-        cf.truncate_database_tables()
         cf.execute_data_load()
         return func.HttpResponse(f"COURSELEAF_DEBUG: Success!")
     except Exception as e:

@@ -1,0 +1,1 @@
+EXEC <DATABASE>.<SCHEMA>.[generate_powerbi_roles];

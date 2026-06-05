@@ -346,7 +346,7 @@ def update_current_tables():
     stored_procedures = ['get_import_rowcounts', 'update_current_courses', 'update_current_crosslists',
                          'update_current_departments', 'update_current_roles', 'update_current_subjects', 
                          'update_current_terms', 'update_current_users', 'generate_powerbi_crosslists', 
-                         'update_ormaintenance_terms']
+                         'generate_powerbi_roles', 'update_ormaintenance_terms']
     for proc_name in stored_procedures:
         sp_query = QUERIES['reg']['stored_procedures'][proc_name]
         qf.run_sql_server_query(REG_HOSTNAME, REG_USERNAME, REG_PASSWORD, sp_query)
